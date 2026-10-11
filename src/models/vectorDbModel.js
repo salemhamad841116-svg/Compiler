@@ -417,6 +417,101 @@ async function getSystemOverviewStats() {
   };
 }
 
+/**
+ * Deletes all chunks and vector embeddings of a document by title.
+ *
+ * @param {string} bookTitle - Title of the document to purge.
+ * @returns {Promise<{ success: boolean, title: string, deletedChunks: number }>}
+ */
+async function deleteDocumentByTitle(bookTitle) {
+  if (!bookTitle) {
+    throw new Error('Document title is required for deletion');
+  }
+  const records = loadRecords();
+  const normalizedTarget = bookTitle.trim().toLowerCase();
+  const remainingRecords = records.filter(
+    (r) => (r.bookTitle || '').trim().toLowerCase() !== normalizedTarget
+  );
+  const deletedChunks = records.length - remainingRecords.length;
+
+  if (deletedChunks > 0) {
+    saveRecords(remainingRecords);
+  }
+
+  return {
+    success: true,
+    title: bookTitle,
+    deletedChunks,
+  };
+}
+
+/**
+ * Updates metadata (title, category, language) across all chunks of a document.
+ *
+ * @param {string} oldTitle - Current title of the document.
+ * @param {Object} newMetadata - { newTitle, category, language }
+ * @returns {Promise<{ success: boolean, updatedChunks: number, newTitle: string }>}
+ */
+async function updateDocumentMetadata(oldTitle, newMetadata = {}) {
+  if (!oldTitle) {
+    throw new Error('Original document title is required');
+  }
+  const records = loadRecords();
+  const normalizedTarget = oldTitle.trim().toLowerCase();
+  const newTitle = (newMetadata.newTitle || oldTitle).trim();
+  const category = (newMetadata.category || '').trim();
+  const language = (newMetadata.language || '').trim();
+
+  let updatedChunks = 0;
+  for (const record of records) {
+    if ((record.bookTitle || '').trim().toLowerCase() === normalizedTarget) {
+      if (newTitle) record.bookTitle = newTitle;
+      if (category) {
+        record.category = category;
+        if (record.metadata) record.metadata.category = category;
+      }
+      if (language) {
+        record.language = language;
+        if (record.metadata) record.metadata.language = language;
+      }
+      updatedChunks += 1;
+    }
+  }
+
+  if (updatedChunks > 0) {
+    saveRecords(records);
+  }
+
+  return {
+    success: true,
+    updatedChunks,
+    newTitle,
+    category,
+    language,
+  };
+}
+
+/**
+ * Retrieves all individual chunks and text snippets for a given document.
+ *
+ * @param {string} bookTitle - Title of the document.
+ * @returns {Promise<Array>} List of chunk objects.
+ */
+async function getDocumentChunks(bookTitle) {
+  if (!bookTitle) return [];
+  const records = loadRecords();
+  const normalizedTarget = bookTitle.trim().toLowerCase();
+  return records
+    .filter((r) => (r.bookTitle || '').trim().toLowerCase() === normalizedTarget)
+    .map((r, index) => ({
+      id: r.id,
+      chunkIndex: r.metadata?.chunkIndex ?? index,
+      chunk: r.chunk,
+      characterCount: r.chunk?.length || 0,
+      createdAt: r.createdAt || r.metadata?.createdAt,
+    }));
+}
+
 module.exports = {
   insertIntoVectorDatabase,
   searchVectorDatabase,
@@ -424,5 +519,8 @@ module.exports = {
   getSupervisorAnalytics,
   getSupervisorAuditLogs,
   getSystemOverviewStats,
+  deleteDocumentByTitle,
+  updateDocumentMetadata,
+  getDocumentChunks,
   cosineSimilarity,
 };

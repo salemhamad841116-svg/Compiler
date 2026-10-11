@@ -112,7 +112,17 @@
   "admin": {
     "header": {
       "title": "Super Admin Central Dashboard",
-      "refresh": "Refresh Analytics"
+      "refresh": "Refresh Analytics",
+      "new_doc": "Ingest New Document"
+    },
+    "nav": {
+      "kpi": "Overview & KPIs",
+      "docs": "Document Hub & Management",
+      "audit": "Supervisor Audit Logs",
+      "supervisors": "Supervisor Profiles",
+      "categories": "Category Management",
+      "inspector": "Vector Vault Inspector",
+      "system": "System Telemetry"
     },
     "kpi": {
       "total_docs": "Total Ingested Documents",
@@ -120,6 +130,51 @@
       "total_raw": "Raw Text Submissions",
       "total_chunks": "Vector Database Chunks",
       "total_pages": "Total Pages Counted"
+    },
+    "docs": {
+      "title": "Master Document Ingestion & Management Hub",
+      "desc": "Complete administrative control: Upload PDFs and books, paste text, transcribe speech, scrape web URLs, edit metadata, and permanently delete documents and vectors.",
+      "tab_upload": "Upload Document (.PDF, .TXT, .MD)",
+      "tab_raw": "Paste Raw Text",
+      "tab_media": "Video / Audio (Speech-to-Text)",
+      "tab_url": "Web URL Scraper",
+      "assign_label": "Assign to Supervisor:",
+      "admin_self": "Super Admin (admin@msruq.com)",
+      "custom_supervisor": "Custom Supervisor Email...",
+      "table_title": "Document Catalog & Full Control",
+      "badge_count": "indexed documents",
+      "search_placeholder": "Search documents by title, category, supervisor...",
+      "filter_all_cats": "All Categories",
+      "filter_all_sups": "All Supervisors",
+      "filter_all_types": "All Methods",
+      "col_title": "Document Title",
+      "col_category": "Category",
+      "col_language": "Language",
+      "col_supervisor": "Supervisor",
+      "col_pages": "Pages",
+      "col_chunks": "Chunks",
+      "col_type": "Ingestion Type",
+      "col_vault": "Data Vault",
+      "col_date": "Date Added",
+      "col_actions": "Actions & Control",
+      "btn_edit": "Edit",
+      "btn_delete": "Delete",
+      "btn_chunks": "Chunks",
+      "btn_download": "Vault File",
+      "empty_table": "No documents ingested yet.",
+      "confirm_delete_title": "Confirm Document Deletion",
+      "confirm_delete_msg": "Are you sure you want to permanently delete this document and all its 768-dim vector embeddings from the database? This action cannot be undone.",
+      "btn_confirm_delete": "Yes, Delete Permanently",
+      "modal_edit_title": "Edit Document Metadata",
+      "modal_edit_desc": "Update document title, category, and language across all vector records.",
+      "doc_title_label": "Document Title:",
+      "category_label": "Category:",
+      "language_label": "Language:",
+      "btn_save": "Save Changes",
+      "btn_cancel": "Cancel",
+      "modal_chunks_title": "Inspect Document Vector Chunks",
+      "chunks_count": "indexed vector chunks",
+      "close": "Close"
     },
     "audit": {
       "title": "Supervisor Ingestion Audit Logs & Page Productivity",
@@ -148,6 +203,31 @@
       "col_desc": "Description",
       "col_created": "Date Created",
       "col_actions": "Actions"
+    },
+    "inspector": {
+      "title": "Knowledge Base Vector Vault Inspector",
+      "desc": "Administrative diagnostic tool to test semantic retrieval precision and chunk cosine similarities using text-embedding-004.",
+      "query_placeholder": "Enter search query to test semantic vector retrieval...",
+      "btn_search": "Run Vector Search Test",
+      "similarity_label": "Min Similarity:",
+      "top_k_label": "Max Results:",
+      "filter_cat": "Filter Category:",
+      "searching": "Calculating query vector and retrieving chunks...",
+      "no_results": "No vector chunks matched the specified criteria.",
+      "results_title": "Matched Vector Chunks",
+      "score": "Cosine Similarity:",
+      "source": "Source Document:",
+      "chunk_text": "Indexed Text Chunk:"
+    },
+    "system": {
+      "title": "Real-Time System Telemetry & Vault Health",
+      "desc": "Live connection telemetry for server runtime, embedding models, LLMs, and persistent Data Vault.",
+      "embedding_model": "Embedding Model",
+      "llm_model": "LLM Engine",
+      "dimension": "Vector Dimension",
+      "vault_status": "Data Vault Status",
+      "system_status": "System Status",
+      "operational": "Fully Operational"
     }
   }
 }

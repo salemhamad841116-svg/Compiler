@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -32,9 +32,13 @@
         </div>
       </div>
       <div class="header-right" style="display: flex; align-items: center; gap: 10px;">
+        <button class="primary-btn btn-sm" id="jumpToIngestBtn" style="background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff; padding: 8px 14px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span data-i18n="admin.header.new_doc">Ingest New Document</span>
+        </button>
         <button class="glass-btn btn-sm lang-toggle-btn" id="langToggleBtn" title="Toggle Language">
           <i class="fa-solid fa-language"></i>
-          <span id="currentLangLabel">EN</span>
+          <span id="currentLangLabel">AR</span>
         </button>
         <button class="glass-btn" id="refreshAllBtn">
           <i class="fa-solid fa-rotate-right"></i>
@@ -43,10 +47,21 @@
       </div>
     </header>
 
+    <!-- Quick Section Navigation Pills -->
+    <nav class="quick-nav-bar glass-card" style="margin-bottom: 20px; padding: 10px 16px; display: flex; gap: 10px; overflow-x: auto;">
+      <a href="#kpiSection" class="nav-pill active"><i class="fa-solid fa-chart-line"></i> <span data-i18n="admin.nav.kpi">Overview & KPIs</span></a>
+      <a href="#adminDocsSection" class="nav-pill"><i class="fa-solid fa-file-shield"></i> <span data-i18n="admin.nav.docs">Document Hub & Management</span></a>
+      <a href="#auditSection" class="nav-pill"><i class="fa-solid fa-clipboard-check"></i> <span data-i18n="admin.nav.audit">Supervisor Audit Logs</span></a>
+      <a href="#supervisorsSection" class="nav-pill"><i class="fa-solid fa-users-gear"></i> <span data-i18n="admin.nav.supervisors">Supervisor Profiles</span></a>
+      <a href="#categoriesSection" class="nav-pill"><i class="fa-solid fa-folder-tree"></i> <span data-i18n="admin.nav.categories">Category Management</span></a>
+      <a href="#vaultInspectorSection" class="nav-pill"><i class="fa-solid fa-microscope"></i> <span data-i18n="admin.nav.inspector">Vector Vault Inspector</span></a>
+      <a href="#systemHealthSection" class="nav-pill"><i class="fa-solid fa-heart-pulse"></i> <span data-i18n="admin.nav.system">System Telemetry</span></a>
+    </nav>
+
     <!-- Main Content Area -->
     <main class="dashboard-body">
       <!-- KPI Stats Grid -->
-      <section class="kpi-grid">
+      <section class="kpi-grid" id="kpiSection">
         <div class="kpi-card">
           <div class="kpi-icon-box" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
             <i class="fa-solid fa-database"></i>
@@ -103,8 +118,256 @@
         </div>
       </section>
 
-      <!-- Supervisor Audit Logs & Page Counting Section -->
-      <section class="audit-section glass-card" style="margin-bottom: 24px;">
+      <!-- Section 2: Master Document Management & Ingestion Hub (Super Admin Full Control) -->
+      <section class="admin-docs-section glass-card" id="adminDocsSection" style="margin-top: 24px; margin-bottom: 24px;">
+        <div class="section-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+          <div>
+            <h3><i class="fa-solid fa-file-shield" style="color: #6366f1;"></i> <span data-i18n="admin.docs.title">Master Document Ingestion & Management Hub</span></h3>
+            <p class="section-desc" data-i18n="admin.docs.desc">Complete administrative control: Upload PDFs and books, paste text, transcribe speech, scrape web URLs, edit metadata, and permanently delete documents and vectors.</p>
+          </div>
+          <!-- Supervisor Attribution Selector for Ingestion -->
+          <div class="ingest-attribution-box" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--glass-border);">
+            <i class="fa-solid fa-user-tag" style="color: #818cf8;"></i>
+            <label for="adminSupervisorAssignSelect" style="font-size: 13px; font-weight: 600;" data-i18n="admin.docs.assign_label">Assign to Supervisor:</label>
+            <select id="adminSupervisorAssignSelect" class="glass-select" style="min-width: 220px;">
+              <option value="admin@msruq.com" data-i18n="admin.docs.admin_self">Super Admin (admin@msruq.com)</option>
+              <option value="supervisor_ahmed@masruq.com">Ahmed (supervisor_ahmed@masruq.com)</option>
+              <option value="supervisor_fatima@masruq.com">Fatima (supervisor_fatima@masruq.com)</option>
+              <option value="supervisor_omar@masruq.com">Omar (supervisor_omar@masruq.com)</option>
+              <option value="custom_sup" data-i18n="admin.docs.custom_supervisor">Custom Supervisor Email...</option>
+            </select>
+            <input type="text" id="adminCustomSupInput" class="glass-input" placeholder="supervisor@msruq.com" style="display: none; width: 180px;">
+          </div>
+        </div>
+
+        <!-- 4-Way Ingestion Tabs Switcher (Identical to Supervisor Dashboard) -->
+        <div class="ingestion-tabs" style="margin-bottom: 20px;">
+          <button type="button" class="tab-btn active" id="adminTabUploadDocBtn">
+            <i class="fa-solid fa-file-lines"></i>
+            <span data-i18n="admin.docs.tab_upload">Document File (.PDF, .TXT, .MD)</span>
+          </button>
+          <button type="button" class="tab-btn" id="adminTabRawTextBtn">
+            <i class="fa-solid fa-paste"></i>
+            <span data-i18n="admin.docs.tab_raw">Paste Raw Text</span>
+          </button>
+          <button type="button" class="tab-btn" id="adminTabMediaBtn">
+            <i class="fa-solid fa-microphone-lines"></i>
+            <span data-i18n="admin.docs.tab_media">Video / Audio (Speech-to-Text)</span>
+          </button>
+          <button type="button" class="tab-btn" id="adminTabUrlScraperBtn">
+            <i class="fa-solid fa-globe"></i>
+            <span data-i18n="admin.docs.tab_url">Web URL Scraper</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Upload Document File -->
+        <div class="tab-pane active" id="adminUploadDocPane">
+          <form id="adminUploadDocForm" class="ingest-inner-card">
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label for="adminDocTitleInput" data-i18n="supervisor.upload.doc_title_label">Document Title (Optional):</label>
+                <input type="text" id="adminDocTitleInput" data-i18n-attr="placeholder:supervisor.upload.doc_title_placeholder" placeholder="e.g., Islamic Jurisprudence & Ethical Leadership" class="glass-input">
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminDocCategorySelect" data-i18n="supervisor.upload.category_label">Category:</label>
+                <select id="adminDocCategorySelect" class="glass-select" required></select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminDocLanguageSelect" data-i18n="supervisor.upload.language_label">Language:</label>
+                <select id="adminDocLanguageSelect" class="glass-select" required>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dropzone" id="adminDocDropzone" style="margin-top: 12px; margin-bottom: 16px;">
+              <input type="file" id="adminDocFileInput" accept=".pdf,.txt,.md,text/plain,text/markdown,application/pdf" style="display: none;">
+              <i class="fa-solid fa-file-circle-plus dropzone-icon"></i>
+              <div class="dropzone-text" id="adminDocDropzoneText" data-i18n="supervisor.upload.drag_drop">Click or Drag & Drop a document (.PDF, .TXT, .MD) here</div>
+              <div class="dropzone-hint" data-i18n="supervisor.upload.supported">Max file size: 50MB</div>
+            </div>
+
+            <button type="submit" class="primary-btn" id="adminStartDocUploadBtn">
+              <i class="fa-solid fa-bolt"></i>
+              <span data-i18n="supervisor.upload.btn_submit">Upload & Index Document</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Tab 2: Paste Raw Text -->
+        <div class="tab-pane" id="adminRawTextPane" style="display: none;">
+          <form id="adminRawTextForm" class="ingest-inner-card">
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label for="adminRawTitleInput" data-i18n="supervisor.raw.title_label">Title / Topic Name:</label>
+                <input type="text" id="adminRawTitleInput" data-i18n-attr="placeholder:supervisor.raw.title_placeholder" placeholder="e.g., Summary of Modern Governance Principles" class="glass-input" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminRawCategorySelect" data-i18n="supervisor.upload.category_label">Category:</label>
+                <select id="adminRawCategorySelect" class="glass-select" required></select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminRawLanguageSelect" data-i18n="supervisor.upload.language_label">Language:</label>
+                <select id="adminRawLanguageSelect" class="glass-select" required>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 12px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <label for="adminRawContentInput" data-i18n="supervisor.raw.content_label">Content:</label>
+                <span class="char-counter" id="adminCharCounter">0 characters</span>
+              </div>
+              <textarea id="adminRawContentInput" class="glass-textarea" rows="6" data-i18n-attr="placeholder:supervisor.raw.content_placeholder" placeholder="Paste raw text, lecture notes, or summaries here..." required></textarea>
+            </div>
+
+            <button type="submit" class="primary-btn" id="adminStartRawBtn">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span data-i18n="supervisor.raw.btn_submit">Process & Index Raw Text</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Tab 3: Video / Audio Speech-to-Text -->
+        <div class="tab-pane" id="adminMediaPane" style="display: none;">
+          <form id="adminMediaForm" class="ingest-inner-card">
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label for="adminMediaTitleInput" data-i18n="supervisor.media.title_label">Media Title / Lecture Topic:</label>
+                <input type="text" id="adminMediaTitleInput" data-i18n-attr="placeholder:supervisor.media.title_placeholder" placeholder="e.g., Friday Khutbah - Financial Transparency (2026)" class="glass-input" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminMediaCategorySelect" data-i18n="supervisor.upload.category_label">Category:</label>
+                <select id="adminMediaCategorySelect" class="glass-select" required></select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminMediaLanguageSelect" data-i18n="supervisor.upload.language_label">Language:</label>
+                <select id="adminMediaLanguageSelect" class="glass-select" required>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dropzone" id="adminMediaDropzone" style="margin-top: 12px; margin-bottom: 16px; border-color: rgba(56, 189, 248, 0.3);">
+              <input type="file" id="adminMediaFileInput" accept=".mp4,.mp3,.wav,.m4a,.ogg,.webm,.mov,.avi,audio/*,video/*" style="display: none;">
+              <i class="fa-solid fa-file-audio dropzone-icon" style="color: #38bdf8;"></i>
+              <div class="dropzone-text" id="adminMediaDropzoneText" data-i18n="supervisor.media.drag_drop">Click or Drag & Drop a Video/Audio file (.MP4, .MP3, .WAV, .M4A) here</div>
+              <div class="dropzone-hint" data-i18n="supervisor.media.supported">Supported: MP4, MP3, WAV, M4A, WEBM, MOV (Max 100MB)</div>
+            </div>
+
+            <button type="submit" class="primary-btn" id="adminStartMediaBtn" style="background: linear-gradient(135deg, #0284c7, #06b6d4);">
+              <i class="fa-solid fa-closed-captioning"></i>
+              <span data-i18n="supervisor.media.btn_submit">Transcribe Speech, Archive & Index</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Tab 4: Web URL Scraper -->
+        <div class="tab-pane" id="adminUrlScraperPane" style="display: none;">
+          <form id="adminUrlScraperForm" class="ingest-inner-card">
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label for="adminTargetUrlInput" data-i18n="supervisor.url.url_label">Target Web URL:</label>
+                <input type="url" id="adminTargetUrlInput" data-i18n-attr="placeholder:supervisor.url.url_placeholder" placeholder="https://example.com/research-article" class="glass-input" required>
+              </div>
+              <div class="form-group" style="flex: 2;">
+                <label for="adminUrlTitleInput" data-i18n="supervisor.url.title_label">Custom Title (Optional):</label>
+                <input type="text" id="adminUrlTitleInput" data-i18n-attr="placeholder:supervisor.url.title_placeholder" placeholder="e.g., Official Policy Guidance & Protocols" class="glass-input">
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminUrlCategorySelect" data-i18n="supervisor.upload.category_label">Category:</label>
+                <select id="adminUrlCategorySelect" class="glass-select" required></select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="adminUrlLanguageSelect" data-i18n="supervisor.upload.language_label">Language:</label>
+                <select id="adminUrlLanguageSelect" class="glass-select" required>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" class="primary-btn" id="adminStartUrlScrapeBtn" style="background: linear-gradient(135deg, #d97706, #f59e0b); margin-top: 12px;">
+              <i class="fa-solid fa-globe"></i>
+              <span data-i18n="supervisor.url.btn_submit">Fetch & Index</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Ingestion Progress Box -->
+        <div class="progress-box glass-card" id="adminUploadProgressBox" style="display: none; margin-top: 16px;">
+          <div class="spinner"></div>
+          <div class="progress-details">
+            <div class="progress-title" id="adminProgressTitle">Processing Ingestion...</div>
+            <div class="progress-desc" id="adminProgressDesc">Archiving into Data Vault & generating Gemini embeddings</div>
+          </div>
+        </div>
+
+        <!-- Master Documents Data Table with Full Administrative Authority -->
+        <div class="table-container" style="margin-top: 28px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h4 style="font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-layer-group" style="color: #818cf8;"></i>
+                <span data-i18n="admin.docs.table_title">Document Catalog & Full Control</span>
+              </h4>
+              <span id="adminDocCountBadge" class="count-badge">0 documents</span>
+            </div>
+            <!-- Multi-Criteria Filter Toolbar -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="adminDocSearchInput" placeholder="Filter documents..." data-i18n-attr="placeholder:admin.docs.search_placeholder">
+              </div>
+              <select id="adminDocFilterCategory" class="glass-select" style="font-size: 12px;">
+                <option value="ALL" data-i18n="admin.docs.filter_all_cats">All Categories</option>
+              </select>
+              <select id="adminDocFilterSupervisor" class="glass-select" style="font-size: 12px;">
+                <option value="ALL" data-i18n="admin.docs.filter_all_sups">All Supervisors</option>
+              </select>
+              <select id="adminDocFilterType" class="glass-select" style="font-size: 12px;">
+                <option value="ALL" data-i18n="admin.docs.filter_all_types">All Methods</option>
+                <option value="book">PDF / Book</option>
+                <option value="raw-text">Raw Text</option>
+                <option value="media">Media / Speech</option>
+                <option value="url">Web URL</option>
+              </select>
+            </div>
+          </div>
+
+          <table class="glass-table">
+            <thead>
+              <tr>
+                <th><i class="fa-solid fa-book"></i> <span data-i18n="admin.docs.col_title">Document Title</span></th>
+                <th><i class="fa-solid fa-folder-tree"></i> <span data-i18n="admin.docs.col_category">Category</span></th>
+                <th><i class="fa-solid fa-language"></i> <span data-i18n="admin.docs.col_language">Language</span></th>
+                <th><i class="fa-solid fa-user-circle"></i> <span data-i18n="admin.docs.col_supervisor">Supervisor</span></th>
+                <th><i class="fa-solid fa-file-invoice"></i> <span data-i18n="admin.docs.col_pages">Pages</span></th>
+                <th><i class="fa-solid fa-cubes"></i> <span data-i18n="admin.docs.col_chunks">Chunks</span></th>
+                <th><i class="fa-solid fa-vault"></i> <span data-i18n="admin.docs.col_vault">Data Vault</span></th>
+                <th><i class="fa-solid fa-calendar"></i> <span data-i18n="admin.docs.col_date">Date Added</span></th>
+                <th style="text-align: right;"><i class="fa-solid fa-sliders"></i> <span data-i18n="admin.docs.col_actions">Actions & Control</span></th>
+              </tr>
+            </thead>
+            <tbody id="adminDocsTableBody">
+              <tr>
+                <td colspan="9" class="empty-state" data-i18n="admin.docs.empty_table">Loading documents...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 3: Supervisor Audit Logs & Page Counting Section -->
+      <section class="audit-section glass-card" id="auditSection" style="margin-bottom: 24px;">
         <div class="section-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
           <div>
             <h3><i class="fa-solid fa-clipboard-check" style="color: #38bdf8;"></i> <span data-i18n="admin.audit.title">Supervisor Audit Logs & Page Counting</span></h3>
@@ -162,8 +425,8 @@
         </div>
       </section>
 
-      <!-- Supervisor Analytics & Performance Section -->
-      <section class="supervisors-section glass-card">
+      <!-- Section 4: Supervisor Analytics & Performance Section -->
+      <section class="supervisors-section glass-card" id="supervisorsSection" style="margin-bottom: 24px;">
         <div class="section-top">
           <div>
             <h3><i class="fa-solid fa-users-gear"></i> <span data-i18n="admin.supervisors.title">Supervisor Profiles & Chunks Breakdown</span></h3>
@@ -181,8 +444,8 @@
         </div>
       </section>
 
-      <!-- Dynamic Category Management Section (CRUD) -->
-      <section class="categories-section glass-card" style="margin-top: 24px;">
+      <!-- Section 5: Dynamic Category Management Section (CRUD) -->
+      <section class="categories-section glass-card" id="categoriesSection" style="margin-top: 24px; margin-bottom: 24px;">
         <div class="section-top" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div>
             <h3><i class="fa-solid fa-folder-tree"></i> <span data-i18n="admin.categories.title">Dynamic Category Management</span></h3>
@@ -212,7 +475,222 @@
           </table>
         </div>
       </section>
+
+      <!-- Section 6: Knowledge Base Vector Vault Inspector -->
+      <section class="inspector-section glass-card" id="vaultInspectorSection" style="margin-bottom: 24px;">
+        <div class="section-top" style="margin-bottom: 16px;">
+          <div>
+            <h3><i class="fa-solid fa-microscope" style="color: #ec4899;"></i> <span data-i18n="admin.inspector.title">Knowledge Base Vector Vault Inspector</span></h3>
+            <p class="section-desc" data-i18n="admin.inspector.desc">Administrative diagnostic tool to test semantic retrieval precision and chunk cosine similarities using text-embedding-004.</p>
+          </div>
+        </div>
+
+        <form id="vaultInspectorForm" style="display: flex; flex-direction: column; gap: 14px; background: rgba(0,0,0,0.25); padding: 18px; border-radius: 12px; border: 1px solid var(--glass-border);">
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <div style="flex: 3; min-width: 260px;">
+              <input type="text" id="inspectorQueryInput" class="glass-input" style="width: 100%; padding: 12px 16px; font-size: 14px;" placeholder="Enter search query to test semantic vector retrieval..." data-i18n-attr="placeholder:admin.inspector.query_placeholder" required>
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <select id="inspectorCategorySelect" class="glass-select" style="width: 100%; height: 100%;">
+                <option value="All" data-i18n="admin.docs.filter_all_cats">All Categories</option>
+              </select>
+            </div>
+            <button type="submit" class="primary-btn" id="runInspectorBtn" style="background: linear-gradient(135deg, #ec4899, #8b5cf6); padding: 12px 24px; font-weight: 600; cursor: pointer;">
+              <i class="fa-solid fa-magnifying-glass-chart"></i>
+              <span data-i18n="admin.inspector.btn_search">Run Vector Search Test</span>
+            </button>
+          </div>
+
+          <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--text-dim);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label for="inspectorMinSim" data-i18n="admin.inspector.similarity_label">Min Similarity:</label>
+              <input type="range" id="inspectorMinSim" min="0.1" max="0.9" step="0.05" value="0.3" style="cursor: pointer;">
+              <span id="inspectorMinSimVal" style="font-weight: 700; color: #818cf8;">30%</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label for="inspectorTopK" data-i18n="admin.inspector.top_k_label">Max Results:</label>
+              <select id="inspectorTopK" class="glass-select" style="padding: 4px 10px; font-size: 12px;">
+                <option value="3">3 Chunks</option>
+                <option value="5" selected>5 Chunks</option>
+                <option value="10">10 Chunks</option>
+                <option value="15">15 Chunks</option>
+              </select>
+            </div>
+          </div>
+        </form>
+
+        <div id="inspectorResultsContainer" style="margin-top: 18px; display: none;">
+          <h4 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-list-ol" style="color: #34d399;"></i>
+            <span data-i18n="admin.inspector.results_title">Matched Vector Chunks</span>
+            <span id="inspectorResultCount" class="count-badge">0 matches</span>
+          </h4>
+          <div id="inspectorResultsList" style="display: flex; flex-direction: column; gap: 12px;"></div>
+        </div>
+      </section>
+
+      <!-- Section 7: Real-Time System Telemetry & Vault Health -->
+      <section class="system-health-section glass-card" id="systemHealthSection" style="margin-bottom: 24px;">
+        <div class="section-top" style="margin-bottom: 16px;">
+          <div>
+            <h3><i class="fa-solid fa-heart-pulse" style="color: #10b981;"></i> <span data-i18n="admin.system.title">Real-Time System Telemetry & Vault Health</span></h3>
+            <p class="section-desc" data-i18n="admin.system.desc">Live connection telemetry for server runtime, embedding models, LLMs, and persistent Data Vault.</p>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+          <div class="kpi-card">
+            <div class="kpi-icon-box" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
+              <i class="fa-solid fa-microchip"></i>
+            </div>
+            <div class="kpi-info">
+              <span class="kpi-label" data-i18n="admin.system.embedding_model">Embedding Model</span>
+              <h2 style="font-size: 18px;" id="sysEmbeddingModel">text-embedding-004</h2>
+              <span class="kpi-sub">Google Gemini AI</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-box" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
+              <i class="fa-solid fa-brain"></i>
+            </div>
+            <div class="kpi-info">
+              <span class="kpi-label" data-i18n="admin.system.llm_model">LLM Engine</span>
+              <h2 style="font-size: 18px;" id="sysLlmModel">gemini-1.5-flash</h2>
+              <span class="kpi-sub">Grounded Ingestion</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-box" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">
+              <i class="fa-solid fa-vector-square"></i>
+            </div>
+            <div class="kpi-info">
+              <span class="kpi-label" data-i18n="admin.system.dimension">Vector Dimension</span>
+              <h2 style="font-size: 18px;" id="sysVectorDim">768-dim</h2>
+              <span class="kpi-sub">Dense Cosine Embeddings</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-box" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee;">
+              <i class="fa-solid fa-vault"></i>
+            </div>
+            <div class="kpi-info">
+              <span class="kpi-label" data-i18n="admin.system.vault_status">Data Vault Status</span>
+              <h2 style="font-size: 18px;" id="sysVaultStatus">Active</h2>
+              <span class="kpi-sub">Permanent Cloud/Local Storage</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-box" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
+              <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div class="kpi-info">
+              <span class="kpi-label" data-i18n="admin.system.system_status">System Status</span>
+              <h2 style="font-size: 18px; color: #34d399;" id="sysOverallStatus" data-i18n="admin.system.operational">Operational</h2>
+              <span class="kpi-sub">100% SLA Guarantee</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- Modal 1: Edit Document Metadata -->
+  <div class="modal-overlay" id="editDocModal">
+    <div class="modal-card glass-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <div class="user-avatar-lg" style="background: rgba(99, 102, 241, 0.2); color: #818cf8;">
+            <i class="fa-solid fa-file-pen"></i>
+          </div>
+          <div>
+            <h2 data-i18n="admin.docs.modal_edit_title">Edit Document Metadata</h2>
+            <span class="modal-email" data-i18n="admin.docs.modal_edit_desc">Update document title, category, and language across all vector records.</span>
+          </div>
+        </div>
+        <button class="close-btn" id="closeEditDocModalBtn">&times;</button>
+      </div>
+
+      <form id="editDocForm" style="margin-top: 16px;">
+        <input type="hidden" id="editOriginalDocTitle">
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="editNewDocTitle" style="display:block; font-size: 13px; font-weight:600; margin-bottom: 6px;" data-i18n="admin.docs.doc_title_label">Document Title:</label>
+          <input type="text" id="editNewDocTitle" class="glass-input" required style="width: 100%;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="editDocCategory" style="display:block; font-size: 13px; font-weight:600; margin-bottom: 6px;" data-i18n="admin.docs.category_label">Category:</label>
+          <select id="editDocCategory" class="glass-select" style="width: 100%;"></select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="editDocLanguage" style="display:block; font-size: 13px; font-weight:600; margin-bottom: 6px;" data-i18n="admin.docs.language_label">Language:</label>
+          <select id="editDocLanguage" class="glass-select" style="width: 100%;">
+            <option value="Arabic" data-i18n="common.lang_arabic">Arabic</option>
+            <option value="English" data-i18n="common.lang_english">English</option>
+            <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="glass-btn" id="cancelEditDocBtn" data-i18n="admin.docs.btn_cancel">Cancel</button>
+          <button type="submit" class="primary-btn" id="saveEditDocBtn" data-i18n="admin.docs.btn_save">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Delete Document Confirmation -->
+  <div class="modal-overlay" id="deleteDocModal">
+    <div class="modal-card glass-card" style="max-width: 480px; border-color: rgba(239, 68, 68, 0.4);">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <div class="user-avatar-lg" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <h2 data-i18n="admin.docs.confirm_delete_title">Confirm Document Deletion</h2>
+            <span class="modal-email" id="deleteDocTargetTitle">Document Title</span>
+          </div>
+        </div>
+        <button class="close-btn" id="closeDeleteDocModalBtn">&times;</button>
+      </div>
+
+      <div style="margin-top: 16px; margin-bottom: 20px; font-size: 13.5px; line-height: 1.6; color: var(--text-dim);" data-i18n="admin.docs.confirm_delete_msg">
+        Are you sure you want to permanently delete this document and all its 768-dim vector embeddings from the database? This action cannot be undone.
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="glass-btn" id="cancelDeleteDocBtn" data-i18n="admin.docs.btn_cancel">Cancel</button>
+        <button type="button" class="primary-btn" id="confirmDeleteDocBtn" style="background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff;" data-i18n="admin.docs.btn_confirm_delete">Yes, Delete Permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Inspect Vector Chunks -->
+  <div class="modal-overlay" id="chunksModal">
+    <div class="modal-card glass-card" style="max-width: 780px;">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <div class="user-avatar-lg" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8;">
+            <i class="fa-solid fa-cubes"></i>
+          </div>
+          <div>
+            <h2 id="chunksModalTitle" data-i18n="admin.docs.modal_chunks_title">Inspect Document Vector Chunks</h2>
+            <span class="modal-email" id="chunksModalSubtitle">0 chunks indexed</span>
+          </div>
+        </div>
+        <button class="close-btn" id="closeChunksModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body" style="max-height: 60vh; overflow-y: auto; margin-top: 14px;">
+        <div id="chunksModalList" style="display: flex; flex-direction: column; gap: 12px;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Modal: Category Add / Edit -->
