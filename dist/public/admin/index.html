@@ -23,7 +23,7 @@
           <i class="fa-solid fa-crown"></i>
         </div>
         <div>
-          <h1>Super Admin Central Dashboard</h1>
+          <h1 data-i18n="admin.header.title">Super Admin Central Dashboard</h1>
           <div class="subdomain-tag">
             <i class="fa-solid fa-server"></i>
             <span>logs.msruq.com</span>
@@ -31,10 +31,14 @@
           </div>
         </div>
       </div>
-      <div class="header-right">
+      <div class="header-right" style="display: flex; align-items: center; gap: 10px;">
+        <button class="glass-btn btn-sm lang-toggle-btn" id="langToggleBtn" title="Toggle Language">
+          <i class="fa-solid fa-language"></i>
+          <span id="currentLangLabel">EN</span>
+        </button>
         <button class="glass-btn" id="refreshAllBtn">
           <i class="fa-solid fa-rotate-right"></i>
-          <span>Refresh Analytics</span>
+          <span data-i18n="admin.header.refresh">Refresh Analytics</span>
         </button>
       </div>
     </header>
@@ -48,7 +52,7 @@
             <i class="fa-solid fa-database"></i>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Total Documents</span>
+            <span class="kpi-label" data-i18n="admin.kpi.total_docs">Total Documents</span>
             <h2 id="kpiTotalDocs">0</h2>
             <span class="kpi-sub">Across All Supervisors</span>
           </div>
@@ -59,7 +63,7 @@
             <i class="fa-solid fa-book-bookmark"></i>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Books Uploaded</span>
+            <span class="kpi-label" data-i18n="admin.kpi.total_books">Books Uploaded</span>
             <h2 id="kpiTotalBooks">0</h2>
             <span class="kpi-sub">PDF, TXT, MD Files</span>
           </div>
@@ -70,7 +74,7 @@
             <i class="fa-solid fa-paste"></i>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Raw Texts Pasted</span>
+            <span class="kpi-label" data-i18n="admin.kpi.total_raw">Raw Texts Pasted</span>
             <h2 id="kpiTotalRawTexts">0</h2>
             <span class="kpi-sub">Direct Note Ingestions</span>
           </div>
@@ -81,7 +85,7 @@
             <i class="fa-solid fa-diagram-project"></i>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Vector Chunks</span>
+            <span class="kpi-label" data-i18n="admin.kpi.total_chunks">Vector Chunks</span>
             <h2 id="kpiTotalChunks">0</h2>
             <span class="kpi-sub">768-dim Embeddings</span>
           </div>
@@ -92,7 +96,7 @@
             <i class="fa-solid fa-file-invoice"></i>
           </div>
           <div class="kpi-info">
-            <span class="kpi-label">Total Pages Counted</span>
+            <span class="kpi-label" data-i18n="admin.kpi.total_pages">Total Pages Counted</span>
             <h2 id="kpiTotalPages">0</h2>
             <span class="kpi-sub">Lifetime Processed Pages</span>
           </div>
@@ -103,19 +107,19 @@
       <section class="audit-section glass-card" style="margin-bottom: 24px;">
         <div class="section-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
           <div>
-            <h3><i class="fa-solid fa-clipboard-check" style="color: #38bdf8;"></i> Supervisor Audit Logs & Page Counting</h3>
-            <p class="section-desc">Track the exact productivity, page volume, and document ingestion actions of every supervisor down to the minute.</p>
+            <h3><i class="fa-solid fa-clipboard-check" style="color: #38bdf8;"></i> <span data-i18n="admin.audit.title">Supervisor Audit Logs & Page Counting</span></h3>
+            <p class="section-desc" data-i18n="admin.audit.desc">Track the exact productivity, page volume, and document ingestion actions of every supervisor down to the minute.</p>
           </div>
           <div class="audit-filters-toolbar">
             <div class="filter-dropdown-box">
               <i class="fa-solid fa-user-filter"></i>
               <select id="auditSupervisorFilter" class="glass-select">
-                <option value="ALL">All Supervisors</option>
+                <option value="ALL" data-i18n="admin.audit.filter_all">All Supervisors</option>
               </select>
             </div>
             <div class="search-box">
               <i class="fa-solid fa-magnifying-glass"></i>
-              <input type="text" id="auditSearchInput" placeholder="Filter audit logs by title, category, supervisor...">
+              <input type="text" id="auditSearchInput" placeholder="Filter audit logs by title, category, supervisor..." data-i18n-attr="placeholder:admin.audit.search_placeholder">
             </div>
           </div>
         </div>
@@ -123,7 +127,7 @@
         <!-- Aggregated Analytics: Lifetime Totals Cards Grid for Each Supervisor (Above Table) -->
         <div style="margin-bottom: 12px;">
           <h4 style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-            <i class="fa-solid fa-chart-pie" style="color: #818cf8;"></i> Lifetime Supervisor Productivity Totals
+            <i class="fa-solid fa-chart-pie" style="color: #818cf8;"></i> <span data-i18n="admin.audit.lifetime_title">Lifetime Supervisor Productivity Totals</span>
           </h4>
           <div class="audit-supervisor-cards-grid" id="auditSupervisorCardsGrid">
             <div class="loading-state">Loading lifetime supervisor totals...</div>
@@ -134,19 +138,19 @@
         <div class="table-container" style="margin-top: 22px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <h4 style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <i class="fa-solid fa-list-check" style="color: #34d399;"></i> Detailed Ingestion Audit Records
+              <i class="fa-solid fa-list-check" style="color: #34d399;"></i> <span data-i18n="admin.audit.table_title">Detailed Ingestion Audit Records</span>
             </h4>
             <span id="auditLogCountBadge" class="count-badge">0 documents logged</span>
           </div>
           <table class="glass-table">
             <thead>
               <tr>
-                <th><i class="fa-solid fa-user-circle"></i> Supervisor Name</th>
-                <th><i class="fa-solid fa-file-lines"></i> Document Title & Category</th>
-                <th><i class="fa-solid fa-copy"></i> Total Pages</th>
-                <th><i class="fa-solid fa-calendar-day"></i> Exact Date & Day</th>
-                <th><i class="fa-solid fa-clock"></i> Exact Time</th>
-                <th><i class="fa-solid fa-vault"></i> Data Vault</th>
+                <th><i class="fa-solid fa-user-circle"></i> <span data-i18n="admin.audit.col_supervisor">Supervisor Name</span></th>
+                <th><i class="fa-solid fa-file-lines"></i> <span data-i18n="admin.audit.col_document">Document Title & Category</span></th>
+                <th><i class="fa-solid fa-copy"></i> <span data-i18n="admin.audit.col_pages">Total Pages</span></th>
+                <th><i class="fa-solid fa-calendar-day"></i> <span data-i18n="admin.audit.col_date">Exact Date & Day</span></th>
+                <th><i class="fa-solid fa-clock"></i> <span data-i18n="admin.audit.col_time">Exact Time</span></th>
+                <th><i class="fa-solid fa-vault"></i> <span data-i18n="admin.audit.col_vault">Data Vault</span></th>
               </tr>
             </thead>
             <tbody id="auditLogsTableBody">
@@ -162,12 +166,12 @@
       <section class="supervisors-section glass-card">
         <div class="section-top">
           <div>
-            <h3><i class="fa-solid fa-users-gear"></i> Supervisor Profiles & Chunks Breakdown</h3>
-            <p class="section-desc">Click on any supervisor card to inspect their exact indexed documents, upload types, and chunks.</p>
+            <h3><i class="fa-solid fa-users-gear"></i> <span data-i18n="admin.supervisors.title">Supervisor Profiles & Chunks Breakdown</span></h3>
+            <p class="section-desc" data-i18n="admin.supervisors.desc">Click on any supervisor card to inspect their exact indexed documents, upload types, and chunks.</p>
           </div>
           <div class="search-box">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="supervisorSearchInput" placeholder="Filter supervisors...">
+            <input type="text" id="supervisorSearchInput" placeholder="Filter supervisors..." data-i18n-attr="placeholder:admin.supervisors.search_placeholder">
           </div>
         </div>
 
@@ -181,12 +185,12 @@
       <section class="categories-section glass-card" style="margin-top: 24px;">
         <div class="section-top" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div>
-            <h3><i class="fa-solid fa-folder-tree"></i> Dynamic Category Management</h3>
-            <p class="section-desc">Manage taxonomy categories for the Knowledge Base. Changes instantly update the Supervisor ingestion dropdowns.</p>
+            <h3><i class="fa-solid fa-folder-tree"></i> <span data-i18n="admin.categories.title">Dynamic Category Management</span></h3>
+            <p class="section-desc" data-i18n="admin.categories.desc">Manage taxonomy categories for the Knowledge Base. Changes instantly update the Supervisor ingestion dropdowns.</p>
           </div>
           <button class="primary-btn" id="openAddCategoryModalBtn" style="background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff; padding: 10px 18px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
             <i class="fa-solid fa-plus"></i>
-            <span>Add New Category</span>
+            <span data-i18n="admin.categories.btn_add">Add New Category</span>
           </button>
         </div>
 
@@ -194,10 +198,10 @@
           <table class="glass-table">
             <thead>
               <tr>
-                <th>Category Name</th>
-                <th>Description</th>
-                <th>Created Date</th>
-                <th style="text-align: right;">Actions</th>
+                <th data-i18n="admin.categories.col_name">Category Name</th>
+                <th data-i18n="admin.categories.col_desc">Description</th>
+                <th data-i18n="admin.categories.col_created">Created Date</th>
+                <th style="text-align: right;" data-i18n="admin.categories.col_actions">Actions</th>
               </tr>
             </thead>
             <tbody id="categoriesTableBody">
@@ -310,6 +314,8 @@
     </div>
   </div>
 
+  <script src="/js/i18n.js"></script>
+  <script>if (!window.i18n) { document.write('<script src="js/i18n.js"><\/script>'); }</script>
   <script src="app.js"></script>
 </body>
 </html>

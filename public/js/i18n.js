@@ -70,6 +70,7 @@
       const candidates = [
         `/locales/${lang}.json`,
         `../locales/${lang}.json`,
+        `./locales/${lang}.json`,
         `/api/locales/${lang}`,
       ];
 

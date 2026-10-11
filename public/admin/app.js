@@ -12,6 +12,14 @@ const kpiTotalPages = document.getElementById('kpiTotalPages');
 const supervisorsGrid = document.getElementById('supervisorsGrid');
 const supervisorSearchInput = document.getElementById('supervisorSearchInput');
 const refreshAllBtn = document.getElementById('refreshAllBtn');
+const langToggleBtn = document.getElementById('langToggleBtn');
+const currentLangLabel = document.getElementById('currentLangLabel');
+
+function updateLangUi(lang) {
+  if (currentLangLabel) {
+    currentLangLabel.textContent = (lang || 'en').toUpperCase();
+  }
+}
 
 // Audit Log Elements
 const auditSupervisorCardsGrid = document.getElementById('auditSupervisorCardsGrid');
@@ -591,12 +599,30 @@ refreshAllBtn.addEventListener('click', () => {
   fetchAuditLogs();
 });
 
+if (langToggleBtn) {
+  langToggleBtn.addEventListener('click', async () => {
+    if (window.i18n) {
+      const newLang = await window.i18n.toggleLanguage();
+      updateLangUi(newLang);
+    }
+  });
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  if (window.i18n) {
+    await window.i18n.init({
+      defaultLang: 'en',
+      allowedLangs: ['en', 'ar'],
+      onChange: (lang) => {
+        updateLangUi(lang);
+      }
+    });
+  }
   fetchOverviewStats();
   fetchSupervisors();
   fetchCategories();

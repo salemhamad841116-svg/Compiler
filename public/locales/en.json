@@ -108,5 +108,46 @@
     "arabic_lang": "Arabic Language",
     "arabic_dict": "Arabic Dictionary",
     "english_dict": "English Dictionary"
+  },
+  "admin": {
+    "header": {
+      "title": "Super Admin Central Dashboard",
+      "refresh": "Refresh Analytics"
+    },
+    "kpi": {
+      "total_docs": "Total Ingested Documents",
+      "total_books": "Total Books Indexed",
+      "total_raw": "Raw Text Submissions",
+      "total_chunks": "Vector Database Chunks",
+      "total_pages": "Total Pages Counted"
+    },
+    "audit": {
+      "title": "Supervisor Ingestion Audit Logs & Page Productivity",
+      "desc": "Track productivity, exact page counts, timestamps down to the second, and category breakdowns for every supervisor.",
+      "filter_all": "All Supervisors",
+      "search_placeholder": "Filter audit logs by title, category, supervisor...",
+      "lifetime_title": "Lifetime Supervisor Productivity Totals",
+      "table_title": "Detailed Ingestion Audit Records",
+      "col_supervisor": "Supervisor Name",
+      "col_document": "Document Title & Category",
+      "col_pages": "Total Pages",
+      "col_date": "Exact Date & Day",
+      "col_time": "Exact Time",
+      "col_vault": "Data Vault"
+    },
+    "supervisors": {
+      "title": "Supervisor Profiles & Chunks Breakdown",
+      "desc": "Click on any supervisor card to inspect their exact indexed documents, upload types, and chunks.",
+      "search_placeholder": "Filter supervisors..."
+    },
+    "categories": {
+      "title": "Dynamic Category Management",
+      "desc": "Add, edit, or delete metadata categories. Changes reflect instantly across Supervisor upload menus.",
+      "btn_add": "Add New Category",
+      "col_name": "Category Name",
+      "col_desc": "Description",
+      "col_created": "Date Created",
+      "col_actions": "Actions"
+    }
   }
 }
