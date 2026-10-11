@@ -1,5 +1,6 @@
 const {
   getSupervisorAnalytics,
+  getSupervisorAuditLogs,
   getSystemOverviewStats,
 } = require('../models/vectorDbModel');
 
@@ -22,6 +23,30 @@ async function getSupervisorsList(req, res) {
     return res.status(500).json({
       success: false,
       error: 'Failed to retrieve supervisors analytics.',
+    });
+  }
+}
+
+/**
+ * Retrieves comprehensive supervisor audit logs and aggregated metrics.
+ * Supports optional query filter: ?supervisorId=...
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+async function getAuditLogs(req, res) {
+  try {
+    const supervisorId = req.query.supervisorId || null;
+    const auditData = await getSupervisorAuditLogs(supervisorId);
+    return res.status(200).json({
+      success: true,
+      data: auditData,
+    });
+  } catch (error) {
+    console.error('[Admin] Error fetching supervisor audit logs:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve supervisor audit logs.',
     });
   }
 }
@@ -81,5 +106,6 @@ async function getSystemOverview(req, res) {
 module.exports = {
   getSupervisorsList,
   getSupervisorDetails,
+  getAuditLogs,
   getSystemOverview,
 };

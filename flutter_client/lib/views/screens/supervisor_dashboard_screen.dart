@@ -788,6 +788,17 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                             style: const TextStyle(fontSize: 10.5, color: Color(0xFFA855F7), fontWeight: FontWeight.bold),
                           ),
                         ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF472B6).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${item.totalPages} pages',
+                            style: const TextStyle(fontSize: 10.5, color: Color(0xFFF472B6), fontWeight: FontWeight.bold),
+                          ),
+                        ),
                         Text('${item.totalChunks} chunks in Vault', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       ],
                     ),

@@ -86,13 +86,83 @@
             <span class="kpi-sub">768-dim Embeddings</span>
           </div>
         </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon-box" style="background: rgba(236, 72, 153, 0.15); color: #f472b6;">
+            <i class="fa-solid fa-file-invoice"></i>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-label">Total Pages Counted</span>
+            <h2 id="kpiTotalPages">0</h2>
+            <span class="kpi-sub">Lifetime Processed Pages</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Supervisor Audit Logs & Page Counting Section -->
+      <section class="audit-section glass-card" style="margin-bottom: 24px;">
+        <div class="section-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+          <div>
+            <h3><i class="fa-solid fa-clipboard-check" style="color: #38bdf8;"></i> Supervisor Audit Logs & Page Counting</h3>
+            <p class="section-desc">Track the exact productivity, page volume, and document ingestion actions of every supervisor down to the minute.</p>
+          </div>
+          <div class="audit-filters-toolbar">
+            <div class="filter-dropdown-box">
+              <i class="fa-solid fa-user-filter"></i>
+              <select id="auditSupervisorFilter" class="glass-select">
+                <option value="ALL">All Supervisors</option>
+              </select>
+            </div>
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="auditSearchInput" placeholder="Filter audit logs by title, category, supervisor...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Aggregated Analytics: Lifetime Totals Cards Grid for Each Supervisor (Above Table) -->
+        <div style="margin-bottom: 12px;">
+          <h4 style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-chart-pie" style="color: #818cf8;"></i> Lifetime Supervisor Productivity Totals
+          </h4>
+          <div class="audit-supervisor-cards-grid" id="auditSupervisorCardsGrid">
+            <div class="loading-state">Loading lifetime supervisor totals...</div>
+          </div>
+        </div>
+
+        <!-- Comprehensive Super Admin Audit Table -->
+        <div class="table-container" style="margin-top: 22px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h4 style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-list-check" style="color: #34d399;"></i> Detailed Ingestion Audit Records
+            </h4>
+            <span id="auditLogCountBadge" class="count-badge">0 documents logged</span>
+          </div>
+          <table class="glass-table">
+            <thead>
+              <tr>
+                <th><i class="fa-solid fa-user-circle"></i> Supervisor Name</th>
+                <th><i class="fa-solid fa-file-lines"></i> Document Title & Category</th>
+                <th><i class="fa-solid fa-copy"></i> Total Pages</th>
+                <th><i class="fa-solid fa-calendar-day"></i> Exact Date & Day</th>
+                <th><i class="fa-solid fa-clock"></i> Exact Time</th>
+                <th><i class="fa-solid fa-vault"></i> Data Vault</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogsTableBody">
+              <tr>
+                <td colspan="6" class="empty-state">Loading supervisor audit logs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <!-- Supervisor Analytics & Performance Section -->
       <section class="supervisors-section glass-card">
         <div class="section-top">
           <div>
-            <h3><i class="fa-solid fa-users-gear"></i> Supervisor Analytics & Productivity</h3>
+            <h3><i class="fa-solid fa-users-gear"></i> Supervisor Profiles & Chunks Breakdown</h3>
             <p class="section-desc">Click on any supervisor card to inspect their exact indexed documents, upload types, and chunks.</p>
           </div>
           <div class="search-box">
@@ -202,6 +272,10 @@
             <span>Books: <strong id="modalBooksCount">0</strong></span>
           </div>
           <div class="stat-pill">
+            <i class="fa-solid fa-file-invoice" style="color: #f472b6;"></i>
+            <span>Total Pages: <strong id="modalPagesCount">0</strong></span>
+          </div>
+          <div class="stat-pill">
             <i class="fa-solid fa-paste" style="color: #60a5fa;"></i>
             <span>Raw Texts: <strong id="modalRawCount">0</strong></span>
           </div>
@@ -220,6 +294,7 @@
                 <th>Document Title</th>
                 <th>Category</th>
                 <th>Language</th>
+                <th>Pages</th>
                 <th>Method</th>
                 <th>Chunks</th>
                 <th>Data Vault File</th>

@@ -63,4 +63,27 @@ function chunkDocumentText(text, chunkSize = 800, chunkOverlap = 150) {
   return chunks;
 }
 
-module.exports = { chunkDocumentText };
+/**
+ * Calculates estimated page count for text content (Words / 300, minimum 1 page).
+ * Used for Raw Text, URL Scraping, and companion text transcriptions.
+ *
+ * @param {string} text - Raw string text.
+ * @returns {number} Estimated page count.
+ */
+function calculateEstimatedPages(text) {
+  if (!text || typeof text !== 'string') {
+    return 1;
+  }
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return 1;
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean).length;
+  // Standard benchmark: ~300 words per page
+  return Math.max(1, Math.ceil(words / 300));
+}
+
+module.exports = {
+  chunkDocumentText,
+  calculateEstimatedPages,
+};

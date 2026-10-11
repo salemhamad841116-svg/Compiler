@@ -2,12 +2,12 @@ const fs = require('fs');
 const pdfParse = require('pdf-parse');
 
 /**
- * Extracts raw textual content from a PDF file on the local filesystem.
+ * Extracts raw textual content and exact page count from a PDF file on the local filesystem.
  *
  * @param {string} filePath - Path to the PDF file on disk.
- * @returns {Promise<string>} Extracted and cleaned text content.
+ * @returns {Promise<{ text: string, numPages: number, info?: Object }>}
  */
-async function extractTextFromPDF(filePath) {
+async function parsePDFDocument(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`File not found at path: ${filePath}`);
   }
@@ -27,7 +27,28 @@ async function extractTextFromPDF(filePath) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  return cleanedText;
+  // Extract exact total number of pages from pdf-parse (numpages)
+  const numPages = typeof pdfData.numpages === 'number' && pdfData.numpages > 0 ? pdfData.numpages : 1;
+
+  return {
+    text: cleanedText,
+    numPages,
+    info: pdfData.info,
+  };
 }
 
-module.exports = { extractTextFromPDF };
+/**
+ * Extracts raw textual content from a PDF file (backwards-compatible wrapper).
+ *
+ * @param {string} filePath - Path to the PDF file on disk.
+ * @returns {Promise<string>} Extracted and cleaned text content.
+ */
+async function extractTextFromPDF(filePath) {
+  const result = await parsePDFDocument(filePath);
+  return result.text;
+}
+
+module.exports = {
+  parsePDFDocument,
+  extractTextFromPDF,
+};

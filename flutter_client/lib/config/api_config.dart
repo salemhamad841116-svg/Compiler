@@ -2,7 +2,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 class ApiConfig {
+  static const String _envApiUrl = String.fromEnvironment('API_URL', defaultValue: '');
+
   static String get defaultBaseUrl {
+    if (_envApiUrl.isNotEmpty) {
+      return _envApiUrl;
+    }
     if (kIsWeb) {
       return 'http://localhost:3000';
     }

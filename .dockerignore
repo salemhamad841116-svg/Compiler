@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.DS_Store
+flutter_client
+*.zip
+.npm-cache
+data/vault/*
+!data/vault/.gitkeep

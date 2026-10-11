@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const CATEGORIES_FILE_PATH = path.join(__dirname, '../../data/categories.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
+const CATEGORIES_FILE_PATH = process.env.CATEGORIES_FILE_PATH || path.join(DATA_DIR, 'categories.json');
+const BACKUP_FILE_PATH = `${CATEGORIES_FILE_PATH}.bak`;
 
 const INITIAL_SEED_CATEGORIES = [
   { id: 'cat_hadith', name: 'Hadith', description: 'Prophetic traditions and narrations', createdAt: new Date().toISOString() },
@@ -35,14 +37,35 @@ function loadCategories() {
     }
     return parsed;
   } catch (err) {
-    console.error('[Categories] Error reading categories file:', err);
+    console.error('[Categories] Error reading categories file, checking backup:', err.message);
+    if (fs.existsSync(BACKUP_FILE_PATH)) {
+      try {
+        const backupRaw = fs.readFileSync(BACKUP_FILE_PATH, 'utf-8');
+        const backupParsed = JSON.parse(backupRaw || '[]');
+        if (Array.isArray(backupParsed) && backupParsed.length > 0) return backupParsed;
+      } catch (backupErr) {
+        console.error('[Categories] Error reading backup file:', backupErr.message);
+      }
+    }
     return INITIAL_SEED_CATEGORIES;
   }
 }
 
 function saveCategories(categories) {
   ensureStorageExists();
-  fs.writeFileSync(CATEGORIES_FILE_PATH, JSON.stringify(categories, null, 2), 'utf-8');
+  const tempPath = `${CATEGORIES_FILE_PATH}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(categories, null, 2), 'utf-8');
+    if (fs.existsSync(CATEGORIES_FILE_PATH)) {
+      fs.copyFileSync(CATEGORIES_FILE_PATH, BACKUP_FILE_PATH);
+    }
+    fs.renameSync(tempPath, CATEGORIES_FILE_PATH);
+  } catch (err) {
+    if (fs.existsSync(tempPath)) {
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+    }
+    throw err;
+  }
 }
 
 /**

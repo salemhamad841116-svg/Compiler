@@ -1,6 +1,7 @@
 class BookItem {
   final String bookTitle;
   final int totalChunks;
+  final int totalPages;
   final String category;
   final String language;
   final String? uploadedBy;
@@ -12,6 +13,7 @@ class BookItem {
   BookItem({
     required this.bookTitle,
     required this.totalChunks,
+    this.totalPages = 1,
     this.category = 'General',
     this.language = 'Arabic',
     this.uploadedBy,
@@ -25,6 +27,7 @@ class BookItem {
     return BookItem(
       bookTitle: json['bookTitle'] as String? ?? 'Untitled Book',
       totalChunks: json['totalChunks'] as int? ?? 0,
+      totalPages: json['totalPages'] as int? ?? 1,
       category: json['category'] as String? ?? 'General',
       language: json['language'] as String? ?? 'Arabic',
       uploadedBy: json['uploadedBy'] as String?,
@@ -39,6 +42,7 @@ class BookItem {
     return {
       'bookTitle': bookTitle,
       'totalChunks': totalChunks,
+      'totalPages': totalPages,
       'category': category,
       'language': language,
       if (uploadedBy != null) 'uploadedBy': uploadedBy,

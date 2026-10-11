@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Private Gemini RAG Backend & Data Vault API (api.msruq.com)
+  # ----------------------------------------------------------------------------
+  rag-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: masruq_rag_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - DATA_VAULT_PATH=/app/data/vault
+      - VECTOR_DB_PATH=/app/data/vector_store.json
+      - CATEGORIES_FILE_PATH=/app/data/categories.json
+    volumes:
+      # Permanent Production Data Lake Volume (Never lost on container restart)
+      - rag_production_data:/app/data
+    ports:
+      - "3000:3000"
+    networks:
+      - masruq_network
+
+  # ----------------------------------------------------------------------------
+  # 2. Standalone Supervisor Data Entry Frontend (waraqa.msruq.com)
+  # ----------------------------------------------------------------------------
+  waraqa-frontend:
+    image: nginx:alpine
+    container_name: masruq_waraqa_frontend
+    restart: unless-stopped
+    volumes:
+      - ./public/supervisor:/usr/share/nginx/html:ro
+      - ./deploy/nginx/supervisor-standalone.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8081:80"
+    depends_on:
+      - rag-backend
+    networks:
+      - masruq_network
+
+  # ----------------------------------------------------------------------------
+  # 3. Enterprise Gateway Reverse Proxy (Subdomain Dispatch & SSL Termination)
+  # ----------------------------------------------------------------------------
+  gateway-proxy:
+    image: nginx:alpine
+    container_name: masruq_gateway_proxy
+    restart: unless-stopped
+    volumes:
+      - ./deploy/nginx/production.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./public:/var/www/public:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - rag-backend
+      - waraqa-frontend
+    networks:
+      - masruq_network
+
+# ------------------------------------------------------------------------------
+# Persistent Storage Volumes
+# ------------------------------------------------------------------------------
+volumes:
+  rag_production_data:
+    name: masruq_rag_production_vault_data
+    driver: local
+
+networks:
+  masruq_network:
+    name: masruq_enterprise_network
+    driver: bridge

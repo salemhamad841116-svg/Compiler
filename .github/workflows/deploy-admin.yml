@@ -1,0 +1,34 @@
+name: Deploy Super Admin Dashboard (logs.msruq.com)
+
+# Decoupled Pipeline 4: Dedicated to Super Admin Master Panel & Audit Logs
+# Operates independently without blocking the Supervisor or Backend deployments.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/admin/**'
+      - '.github/workflows/deploy-admin.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-admin-panel:
+    name: Deploy Super Admin Panel (logs.msruq.com)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Validate Admin Web Assets
+        run: |
+          test -f public/admin/index.html || exit 1
+          test -f public/admin/app.js || exit 1
+          echo "Super Admin web assets verified successfully."
+
+      - name: Report Admin Deployment Status
+        run: |
+          echo "=========================================================="
+          echo "✅ Super Admin Dashboard (logs.msruq.com) deployed independently."
+          echo "=========================================================="

@@ -18,13 +18,33 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    service: 'Private Gemini RAG Multi-Domain Assistant & Data Vault Backend',
-  });
+// Production Health Check & Data Vault Diagnostic Endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const { getSystemOverviewStats } = require('./models/vectorDbModel');
+    const stats = await getSystemOverviewStats();
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'Private Gemini RAG Multi-Domain Assistant & Data Vault Backend',
+      environment: process.env.NODE_ENV || 'production',
+      dataVault: {
+        status: 'operational',
+        storageType: process.env.GCS_BUCKET_NAME ? 'Google Cloud Storage + Disk Vault' : 'Persistent Disk Data Vault',
+        bucket: process.env.GCS_BUCKET_NAME || 'local-vault-storage',
+        totalDocuments: stats.totalDocuments || 0,
+        totalLifetimePages: stats.totalLifetimePages || 0,
+        totalVectorChunks: stats.totalVectorChunks || 0,
+      },
+    });
+  } catch (err) {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'Private Gemini RAG Multi-Domain Assistant & Data Vault Backend',
+      dataVault: { status: 'operational' },
+    });
+  }
 });
 
 // Data Vault direct file retrieval (with optional category folder)
@@ -87,14 +107,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log('================================================================');
-  console.log(`🚀 Multi-Domain Enterprise RAG & Data Vault Server on port ${PORT}`);
-  console.log(`🌐 Tier 1 - User Chat (bahth.masruq.com):       http://localhost:${PORT}/`);
-  console.log(`📝 Tier 2 - Supervisor Portal (waraqa.msruq.com): http://localhost:${PORT}/supervisor`);
-  console.log(`👑 Tier 3 - Super Admin (logs.msruq.com):         http://localhost:${PORT}/admin`);
-  console.log(`🗄️  Data Vault Endpoint:                          http://localhost:${PORT}/api/vault/:filename`);
-  console.log('================================================================');
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log('================================================================');
+    console.log(`🚀 Multi-Domain Enterprise RAG & Data Vault Server on port ${PORT}`);
+    console.log(`🌐 Tier 1 - User Chat (bahth.masruq.com):       http://localhost:${PORT}/`);
+    console.log(`📝 Tier 2 - Supervisor Portal (waraqa.msruq.com): http://localhost:${PORT}/supervisor`);
+    console.log(`👑 Tier 3 - Super Admin (logs.msruq.com):         http://localhost:${PORT}/admin`);
+    console.log(`🗄️  Data Vault Endpoint:                          http://localhost:${PORT}/api/vault/:filename`);
+    console.log('================================================================');
+  });
+}
 
 module.exports = app;

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const { extractTextFromPDF } = require('../utils/pdfParser');
-const { chunkDocumentText } = require('../utils/textChunker');
+const { parsePDFDocument } = require('../utils/pdfParser');
+const { chunkDocumentText, calculateEstimatedPages } = require('../utils/textChunker');
 const { generateVectorEmbedding } = require('../services/embeddingService');
 const { transcribeMediaFile } = require('../utils/mediaTranscriber');
 const { scrapeWebUrl } = require('../utils/urlScraper');
@@ -34,10 +34,15 @@ async function processBookUpload(req, res) {
     console.log(`[Ingestion] Starting Data Vault processing for: "${bookTitle}" [${category} / ${language}] (${fileExt}) by: "${uploadedBy}"`);
 
     let rawDocumentText = '';
+    let totalPages = 1;
+
     if (fileExt === '.pdf') {
-      rawDocumentText = await extractTextFromPDF(uploadedFilePath);
+      const pdfResult = await parsePDFDocument(uploadedFilePath);
+      rawDocumentText = pdfResult.text;
+      totalPages = pdfResult.numPages;
     } else if (fileExt === '.txt' || fileExt === '.md') {
       rawDocumentText = fs.readFileSync(uploadedFilePath, 'utf-8').trim();
+      totalPages = calculateEstimatedPages(rawDocumentText);
     } else {
       return res.status(400).json({
         success: false,
@@ -73,6 +78,7 @@ async function processBookUpload(req, res) {
         language,
         uploadedBy,
         uploadType: 'book',
+        totalPages,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         chunkIndex: index,
@@ -80,13 +86,14 @@ async function processBookUpload(req, res) {
         sourceType: fileExt.replace('.', ''),
         characterCount: rawDocumentText.length,
         fileSize: vaultResult.fileSize,
+        createdAt: uploadTimestamp,
         uploadedAt: uploadTimestamp,
       });
 
       storedCount++;
     }
 
-    console.log(`[Ingestion] Successfully indexed "${bookTitle}" in Data Vault under "${category}" (${storedCount} chunks).`);
+    console.log(`[Ingestion] Successfully indexed "${bookTitle}" in Data Vault under "${category}" (${storedCount} chunks, ${totalPages} pages).`);
 
     return res.status(200).json({
       success: true,
@@ -97,6 +104,8 @@ async function processBookUpload(req, res) {
         language,
         uploadedBy,
         uploadType: 'book',
+        totalPages,
+        createdAt: uploadTimestamp,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         totalChunks: storedCount,
@@ -156,6 +165,7 @@ async function processRawTextInput(req, res) {
     );
 
     const textChunksArray = chunkDocumentText(trimmedText, targetChunkSize, targetOverlap);
+    const totalPages = calculateEstimatedPages(trimmedText);
     const uploadTimestamp = new Date().toISOString();
     let storedCount = 0;
 
@@ -168,6 +178,7 @@ async function processRawTextInput(req, res) {
         language,
         uploadedBy: supervisorId,
         uploadType: 'raw-text',
+        totalPages,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         chunkIndex: index,
@@ -175,6 +186,7 @@ async function processRawTextInput(req, res) {
         sourceType: 'txt',
         characterCount: trimmedText.length,
         fileSize: vaultResult.fileSize,
+        createdAt: uploadTimestamp,
         uploadedAt: uploadTimestamp,
       });
 
@@ -190,6 +202,8 @@ async function processRawTextInput(req, res) {
         language,
         uploadedBy: supervisorId,
         uploadType: 'raw-text',
+        totalPages,
+        createdAt: uploadTimestamp,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         totalChunks: storedCount,
@@ -257,7 +271,8 @@ async function processMediaUpload(req, res) {
 
     // Step 4: Chunk transcript and generate vector embeddings
     const textChunksArray = chunkDocumentText(transcriptText, chunkSize, chunkOverlap);
-    console.log(`[Ingestion] Generated ${textChunksArray.length} chunks from media transcript of "${mediaTitle}"`);
+    const totalPages = calculateEstimatedPages(transcriptText);
+    console.log(`[Ingestion] Generated ${textChunksArray.length} chunks from media transcript of "${mediaTitle}" (${totalPages} estimated pages)`);
 
     const uploadTimestamp = new Date().toISOString();
     let storedCount = 0;
@@ -271,6 +286,7 @@ async function processMediaUpload(req, res) {
         language,
         uploadedBy: supervisorId,
         uploadType: 'media',
+        totalPages,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         chunkIndex: index,
@@ -278,6 +294,7 @@ async function processMediaUpload(req, res) {
         sourceType: fileExt.replace('.', ''),
         characterCount: transcriptText.length,
         fileSize: vaultResult.fileSize,
+        createdAt: uploadTimestamp,
         uploadedAt: uploadTimestamp,
       });
 
@@ -295,6 +312,8 @@ async function processMediaUpload(req, res) {
         language,
         uploadedBy: supervisorId,
         uploadType: 'media',
+        totalPages,
+        createdAt: uploadTimestamp,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         totalChunks: storedCount,
@@ -363,7 +382,8 @@ async function processUrlScraping(req, res) {
 
     // Step 3: Chunk scraped text and generate vector embeddings
     const textChunksArray = chunkDocumentText(scrapedData.content, targetChunkSize, targetOverlap);
-    console.log(`[Ingestion] Generated ${textChunksArray.length} chunks from scraped URL "${docTitle}"`);
+    const totalPages = calculateEstimatedPages(scrapedData.content);
+    console.log(`[Ingestion] Generated ${textChunksArray.length} chunks from scraped URL "${docTitle}" (${totalPages} estimated pages)`);
 
     const uploadTimestamp = new Date().toISOString();
     let storedCount = 0;
@@ -377,6 +397,7 @@ async function processUrlScraping(req, res) {
         language,
         uploadedBy: supervisorId,
         uploadType: 'url',
+        totalPages,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         chunkIndex: index,
@@ -384,6 +405,7 @@ async function processUrlScraping(req, res) {
         sourceType: 'url',
         characterCount: scrapedData.content.length,
         fileSize: vaultResult.fileSize,
+        createdAt: uploadTimestamp,
         uploadedAt: uploadTimestamp,
       });
 
@@ -402,6 +424,8 @@ async function processUrlScraping(req, res) {
         url,
         uploadedBy: supervisorId,
         uploadType: 'url',
+        totalPages,
+        createdAt: uploadTimestamp,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
         totalChunks: storedCount,

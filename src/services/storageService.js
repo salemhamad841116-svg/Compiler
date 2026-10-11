@@ -1,10 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-// Local Data Vault directory fallback for persistent raw file archiving
-const LOCAL_VAULT_DIR = path.join(__dirname, '../../data/vault/');
+// Production-Ready Data Vault directory with persistent volume support
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
+const LOCAL_VAULT_DIR = process.env.DATA_VAULT_PATH || path.join(DATA_DIR, 'vault');
 
-// Ensure local vault storage directory exists
+// Ensure local vault storage directory exists with recursive directory structure
 if (!fs.existsSync(LOCAL_VAULT_DIR)) {
   fs.mkdirSync(LOCAL_VAULT_DIR, { recursive: true });
 }
@@ -17,6 +18,7 @@ class StorageService {
   constructor() {
     this.bucketName = process.env.GCS_BUCKET_NAME || process.env.FIREBASE_STORAGE_BUCKET || 'private-rag-raw-books-vault';
     this.useCloudStorage = Boolean(process.env.GCS_BUCKET_NAME || process.env.FIREBASE_STORAGE_BUCKET);
+    this.vaultDir = LOCAL_VAULT_DIR;
   }
 
   /**
