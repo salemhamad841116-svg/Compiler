@@ -1,0 +1,38 @@
+[
+  {
+    "id": "cat_hadith",
+    "name": "Hadith",
+    "description": "Prophetic traditions and narrations",
+    "createdAt": "2026-10-11T04:06:03.883Z"
+  },
+  {
+    "id": "cat_medicine",
+    "name": "Medicine",
+    "description": "Medical sciences, pharmacology, and treatments",
+    "createdAt": "2026-10-11T04:06:03.885Z"
+  },
+  {
+    "id": "cat_english_lang",
+    "name": "English Language",
+    "description": "English linguistics, grammar, and literature",
+    "createdAt": "2026-10-11T04:06:03.885Z"
+  },
+  {
+    "id": "cat_arabic_lang",
+    "name": "Arabic Language",
+    "description": "Arabic linguistics, rhetoric, and morphology",
+    "createdAt": "2026-10-11T04:06:03.885Z"
+  },
+  {
+    "id": "cat_arabic_dict",
+    "name": "Arabic Dictionary",
+    "description": "Classical and modern Arabic lexicons and glossaries",
+    "createdAt": "2026-10-11T04:06:03.885Z"
+  },
+  {
+    "id": "cat_english_dict",
+    "name": "English Dictionary",
+    "description": "English lexicons, thesauri, and vocabularies",
+    "createdAt": "2026-10-11T04:06:03.885Z"
+  }
+]

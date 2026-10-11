@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Private AI Search - bahth.masruq.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow effects -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <div class="app-layout">
+    <!-- Top Glass Navigation Bar (Strict User Search - No Upload Controls) -->
+    <header class="glass-header">
+      <div class="header-left">
+        <div class="logo-badge">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div class="brand-info">
+          <h1>Private Knowledge Search</h1>
+          <div class="connection-status" id="connectionStatus">
+            <span class="status-dot"></span>
+            <span class="status-text">Connecting to Knowledge Base...</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="subdomain-tag">
+          <i class="fa-solid fa-globe"></i>
+          <span>bahth.masruq.com</span>
+        </div>
+        <button class="glass-btn btn-icon" id="clearChatBtn" title="Clear Conversation">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Chat Workspace -->
+    <main class="chat-workspace">
+      <!-- Chat Messages Container -->
+      <div class="messages-container" id="messagesContainer">
+        <!-- Messages dynamically rendered here -->
+      </div>
+
+      <!-- Quick Suggestion Starter Prompts -->
+      <div class="suggestions-container" id="suggestionsContainer">
+        <div class="suggestions-title">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Quick Starter Prompts</span>
+        </div>
+        <div class="suggestions-grid">
+          <button class="suggestion-chip" data-prompt="What are the main principles and core ideas explained in the books?">
+            What are the main principles and core ideas?
+          </button>
+          <button class="suggestion-chip" data-prompt="Summarize the key takeaways and methodologies presented.">
+            Summarize key takeaways & methodologies
+          </button>
+          <button class="suggestion-chip" data-prompt="Compare the arguments and concepts discussed across the chapters.">
+            Compare arguments across chapters
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom Glass Input Area -->
+      <div class="input-wrapper">
+        <form class="glass-input-box" id="chatForm">
+          <textarea 
+            id="queryInput" 
+            placeholder="Ask anything strictly based on your knowledge base books and notes..." 
+            rows="1"
+            autocomplete="off"
+          ></textarea>
+          <button type="submit" class="send-btn" id="sendBtn" title="Send Question">
+            <i class="fa-solid fa-arrow-up"></i>
+          </button>
+        </form>
+        <div class="input-footer">
+          <i class="fa-solid fa-lock"></i>
+          End-User Isolation Mode • Zero Hallucinations • Answers verified against vector index.
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
