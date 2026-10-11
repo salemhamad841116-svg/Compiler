@@ -163,7 +163,7 @@ class ChatBubble extends StatelessWidget {
                         citation: entry.value,
                         index: entry.key,
                       );
-                    }).toList(),
+                    }),
                   ],
                 ],
               ),

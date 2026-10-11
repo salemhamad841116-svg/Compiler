@@ -28,5 +28,8 @@
   "btn_send": "إرسال",
   "btn_refresh": "تحديث",
   "lang_en": "الإنجليزية",
-  "lang_ar": "العربية"
+  "lang_ar": "العربية",
+  "nav_chat": "المساعد والبحث",
+  "nav_supervisor": "بوابة المشرفين",
+  "nav_library": "قاعدة المعرفة"
 }

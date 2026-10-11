@@ -97,7 +97,8 @@ class _BookUploadDialogState extends State<BookUploadDialog> {
                                       final success = await ingestionProvider.pickAndUploadBook(
                                         customTitle: _fileTitleController.text,
                                       );
-                                      if (success && mounted) {
+                                      if (!mounted) return;
+                                      if (success) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(
                                             content: Text('Document successfully indexed!'),
@@ -163,7 +164,8 @@ class _BookUploadDialogState extends State<BookUploadDialog> {
                                         title: _rawTitleController.text,
                                         textContent: _rawTextController.text,
                                       );
-                                      if (success && mounted) {
+                                      if (!mounted) return;
+                                      if (success) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(
                                             content: Text('Raw text successfully indexed!'),

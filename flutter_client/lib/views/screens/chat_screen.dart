@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/localization_provider.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/book_upload_dialog.dart';
@@ -113,6 +114,21 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ],
                 ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.language, size: 16),
+                label: Text(
+                  context.watch<LocalizationProvider>().currentLocale.toUpperCase(),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                onPressed: () {
+                  context.read<LocalizationProvider>().toggleLocale();
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.library_books_rounded),

@@ -5,7 +5,7 @@ import 'services/api_service.dart';
 import 'providers/chat_provider.dart';
 import 'providers/ingestion_provider.dart';
 import 'providers/localization_provider.dart';
-import 'views/screens/chat_screen.dart';
+import 'views/screens/main_navigation_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,7 +67,7 @@ class PrivateRagApp extends StatelessWidget {
           ),
           scaffoldBackgroundColor: const Color(0xFF020617),
         ),
-        home: const ChatScreen(),
+        home: const MainNavigationScreen(),
       ),
     );
   }

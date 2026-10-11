@@ -118,9 +118,13 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                     : [const Color(0xFFF8FAFC), const Color(0xFFE2E8F0)],
               ),
             ),
-            child: isDesktop
-                ? _buildDesktopLayout(context, ingestionProvider)
-                : _buildMobileLayout(context, ingestionProvider),
+            child: SafeArea(
+              top: false,
+              bottom: true,
+              child: isDesktop
+                  ? _buildDesktopLayout(context, ingestionProvider)
+                  : _buildMobileLayout(context, ingestionProvider),
+            ),
           ),
           // Mobile Thumb-Friendly Bottom Navigation Bar
           bottomNavigationBar: isDesktop
@@ -188,7 +192,7 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
               _buildSidebarItem(3, Icons.public_rounded, 'Web URL Scraper'),
               const Spacer(),
               // Vault Storage Badge
-              GlassContainer(
+              const GlassContainer(
                 borderRadius: 12,
                 padding: const EdgeInsets.all(12),
                 child: const Row(
@@ -324,7 +328,8 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                   ? null
                   : () async {
                       final success = await provider.pickAndUploadBook(customTitle: _docTitleController.text);
-                      if (success && mounted) {
+                      if (!mounted) return;
+                      if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document successfully archived & indexed!'), backgroundColor: Colors.green));
                         _docTitleController.clear();
                       }
@@ -394,7 +399,8 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                         title: _rawTitleController.text,
                         textContent: _rawContentController.text,
                       );
-                      if (success && mounted) {
+                      if (!mounted) return;
+                      if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Raw text archived & indexed!'), backgroundColor: Colors.green));
                         _rawTitleController.clear();
                         _rawContentController.clear();
@@ -449,7 +455,8 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                   ? null
                   : () async {
                       final success = await provider.pickAndUploadMedia(title: _mediaTitleController.text);
-                      if (success && mounted) {
+                      if (!mounted) return;
+                      if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Media transcribed & indexed!'), backgroundColor: Colors.green));
                         _mediaTitleController.clear();
                       }
@@ -518,9 +525,9 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                         url: _urlInputController.text,
                         title: _urlTitleController.text,
                       );
-                      if (mounted) {
-                        if (success) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                      if (!mounted) return;
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('URL content scraped, archived & indexed successfully!'),
                               backgroundColor: Color(0xFF10B981),
@@ -548,8 +555,7 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
                             ),
                           );
                         }
-                      }
-                    },
+                      },
               icon: const Icon(Icons.travel_explore),
               label: const Text('Fetch & Index'),
             ),
@@ -726,7 +732,7 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.between,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Indexed Documents in Vault', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
               IconButton(

@@ -47,8 +47,11 @@ class _BooksScreenState extends State<BooksScreen> {
                 : [const Color(0xFFF8FAFC), const Color(0xFFE2E8F0)],
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+        child: SafeArea(
+          top: false,
+          bottom: true,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -163,6 +166,7 @@ class _BooksScreenState extends State<BooksScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

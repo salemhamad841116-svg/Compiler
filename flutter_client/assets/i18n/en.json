@@ -28,5 +28,8 @@
   "btn_send": "Send",
   "btn_refresh": "Refresh",
   "lang_en": "English",
-  "lang_ar": "Arabic"
+  "lang_ar": "Arabic",
+  "nav_chat": "Search & AI Chat",
+  "nav_supervisor": "Supervisor Hub",
+  "nav_library": "Knowledge Base"
 }
