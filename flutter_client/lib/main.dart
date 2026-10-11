@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'services/api_service.dart';
 import 'providers/chat_provider.dart';
 import 'providers/ingestion_provider.dart';
+import 'providers/localization_provider.dart';
 import 'views/screens/chat_screen.dart';
 
 void main() {
@@ -21,6 +22,9 @@ class PrivateRagApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<ApiService>.value(value: apiService),
+        ChangeNotifierProvider(
+          create: (context) => LocalizationProvider(),
+        ),
         ChangeNotifierProvider(
           create: (context) => ChatProvider(apiService: apiService),
         ),

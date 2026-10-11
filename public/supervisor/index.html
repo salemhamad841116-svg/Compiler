@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="/js/i18n.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -22,22 +23,22 @@
           <i class="fa-solid fa-pen-nib"></i>
         </div>
         <div class="brand-info">
-          <h1>Supervisor Data Ingestion Hub</h1>
-          <div class="subdomain-text">waraqa.msruq.com • Data Vault Archival Engine</div>
+          <h1 data-i18n="supervisor.header.title">Supervisor Data Ingestion Hub</h1>
+          <div class="subdomain-text" data-i18n="supervisor.header.subtitle">waraqa.msruq.com • Data Vault Archival Engine</div>
         </div>
       </div>
       <div class="header-right">
         <!-- Supervisor Identity Picker -->
         <div class="supervisor-identity-box">
           <i class="fa-solid fa-user-shield"></i>
-          <label for="supervisorEmailSelect">Active Supervisor:</label>
+          <label for="supervisorEmailSelect" data-i18n="supervisor.header.active">Active Supervisor:</label>
           <select id="supervisorEmailSelect" class="glass-select">
             <option value="supervisor_ahmed@masruq.com">Ahmed (supervisor_ahmed@masruq.com)</option>
             <option value="supervisor_fatima@masruq.com">Fatima (supervisor_fatima@masruq.com)</option>
             <option value="supervisor_omar@masruq.com">Omar (supervisor_omar@masruq.com)</option>
-            <option value="supervisor_custom">Custom ID / Email...</option>
+            <option value="supervisor_custom" data-i18n="supervisor.header.custom">Custom ID / Email...</option>
           </select>
-          <input type="text" id="customSupervisorInput" placeholder="Enter Supervisor Email..." class="glass-input custom-sup-input" style="display: none;">
+          <input type="text" id="customSupervisorInput" data-i18n-attr="placeholder:supervisor.header.custom" placeholder="Enter Supervisor Email..." class="glass-input custom-sup-input" style="display: none;">
         </div>
       </div>
     </header>
@@ -48,19 +49,19 @@
       <div class="ingestion-tabs">
         <button type="button" class="tab-btn active" id="tabUploadDocBtn">
           <i class="fa-solid fa-file-lines"></i>
-          <span>Document File (.PDF, .TXT, .MD)</span>
+          <span data-i18n="supervisor.tabs.document">Document File (.PDF, .TXT, .MD)</span>
         </button>
         <button type="button" class="tab-btn" id="tabRawTextBtn">
           <i class="fa-solid fa-paste"></i>
-          <span>Paste Raw Text</span>
+          <span data-i18n="supervisor.tabs.raw_text">Paste Raw Text</span>
         </button>
         <button type="button" class="tab-btn" id="tabMediaBtn">
           <i class="fa-solid fa-microphone-lines"></i>
-          <span>Video / Audio (Speech-to-Text)</span>
+          <span data-i18n="supervisor.tabs.media">Video / Audio (Speech-to-Text)</span>
         </button>
         <button type="button" class="tab-btn" id="tabUrlScraperBtn">
           <i class="fa-solid fa-globe"></i>
-          <span>Web URL Scraper</span>
+          <span data-i18n="supervisor.tabs.url">Web URL Scraper</span>
         </button>
       </div>
 
@@ -68,38 +69,39 @@
       <div class="tab-pane active" id="uploadDocPane">
         <div class="glass-card">
           <div class="card-header">
-            <h3><i class="fa-solid fa-cloud-arrow-up"></i> Upload Document (.PDF, .TXT, .MD)</h3>
-            <span class="type-pill">Data Vault Archival</span>
+            <h3><i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="supervisor.upload.title">Upload Document (.PDF, .TXT, .MD)</span></h3>
+            <span class="type-pill" data-i18n="supervisor.upload.vault_badge">Data Vault Archival</span>
           </div>
-          <p class="card-desc">Upload books, research papers, or articles. Files are permanently archived in the Data Vault and embedded via text-embedding-004.</p>
+          <p class="card-desc" data-i18n="supervisor.upload.desc">Upload books, research papers, or articles. Files are permanently archived in the Data Vault and embedded via text-embedding-004.</p>
           
           <form id="uploadDocForm">
             <div class="form-group">
-              <label for="docTitleInput">Document Title (Optional):</label>
-              <input type="text" id="docTitleInput" placeholder="e.g., Islamic Jurisprudence & Ethical Leadership" class="glass-input">
+              <label for="docTitleInput" data-i18n="supervisor.upload.doc_title_label">Document Title (Optional):</label>
+              <input type="text" id="docTitleInput" data-i18n-attr="placeholder:supervisor.upload.doc_title_placeholder" placeholder="e.g., Islamic Jurisprudence & Ethical Leadership" class="glass-input">
             </div>
 
             <!-- Metadata Tags: Category & Language -->
             <div class="form-row">
               <div class="form-group">
-                <label for="docCategorySelect"><i class="fa-solid fa-folder-tree"></i> Category:</label>
+                <label for="docCategorySelect"><i class="fa-solid fa-folder-tree"></i> <span data-i18n="supervisor.upload.category_label">Category:</span></label>
                 <select id="docCategorySelect" class="glass-select" required>
-                  <option value="Religion">Religion</option>
-                  <option value="History">History</option>
-                  <option value="Science">Science</option>
-                  <option value="Literature">Literature</option>
-                  <option value="General" selected>General</option>
-                  <option value="Law">Law & Jurisprudence</option>
-                  <option value="Philosophy">Philosophy</option>
-                  <option value="Economics">Economics</option>
+                  <option value="Religion" data-i18n="categories.religion">Religion</option>
+                  <option value="History" data-i18n="categories.history">History</option>
+                  <option value="Science" data-i18n="categories.science">Science</option>
+                  <option value="Literature" data-i18n="categories.literature">Literature</option>
+                  <option value="General" data-i18n="categories.general" selected>General</option>
+                  <option value="Hadith" data-i18n="categories.hadith">Hadith</option>
+                  <option value="Medicine" data-i18n="categories.medicine">Medicine</option>
+                  <option value="English Language" data-i18n="categories.english_lang">English Language</option>
+                  <option value="Arabic Language" data-i18n="categories.arabic_lang">Arabic Language</option>
                 </select>
               </div>
               <div class="form-group">
-                <label for="docLanguageSelect"><i class="fa-solid fa-language"></i> Language:</label>
+                <label for="docLanguageSelect"><i class="fa-solid fa-language"></i> <span data-i18n="supervisor.upload.language_label">Language:</span></label>
                 <select id="docLanguageSelect" class="glass-select" required>
-                  <option value="Arabic" selected>Arabic</option>
-                  <option value="English">English</option>
-                  <option value="Mixed">Mixed</option>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
                 </select>
               </div>
             </div>
@@ -107,13 +109,13 @@
             <div class="dropzone" id="docDropzone">
               <input type="file" id="docFileInput" accept=".pdf,.txt,.md,text/plain,text/markdown,application/pdf" style="display: none;">
               <i class="fa-solid fa-file-circle-plus dropzone-icon"></i>
-              <div class="dropzone-text" id="docDropzoneText">Click or Drag & Drop a document (.PDF, .TXT, .MD) here</div>
-              <div class="dropzone-hint">Max file size: 50MB</div>
+              <div class="dropzone-text" id="docDropzoneText" data-i18n="supervisor.upload.drag_drop">Click or Drag & Drop a document (.PDF, .TXT, .MD) here</div>
+              <div class="dropzone-hint" data-i18n="supervisor.upload.supported">Max file size: 50MB</div>
             </div>
 
             <button type="submit" class="primary-btn" id="startDocUploadBtn">
               <i class="fa-solid fa-bolt"></i>
-              <span>Archive in Vault & Index Document</span>
+              <span data-i18n="supervisor.upload.btn_submit">Upload & Index Document</span>
             </button>
           </form>
         </div>
@@ -123,50 +125,50 @@
       <div class="tab-pane" id="rawTextPane">
         <div class="glass-card">
           <div class="card-header">
-            <h3><i class="fa-solid fa-clipboard-check"></i> Paste Raw Text / Article</h3>
-            <span class="type-pill">Auto-creates .TXT Vault File</span>
+            <h3><i class="fa-solid fa-clipboard-check"></i> <span data-i18n="supervisor.raw.title">Paste Raw Text / Article</span></h3>
+            <span class="type-pill" data-i18n="supervisor.raw.desc">Auto-creates .TXT Vault File</span>
           </div>
-          <p class="card-desc">Paste copied notes, speeches, or code. The system automatically creates a permanent .txt file in the Data Vault and indexes the chunks.</p>
+          <p class="card-desc" data-i18n="supervisor.raw.desc">Paste copied notes, speeches, or code. The system automatically creates a permanent .txt file in the Data Vault and indexes the chunks.</p>
           
           <form id="rawTextForm">
             <div class="form-group">
-              <label for="rawTextTitleInput">Title / Topic Name:</label>
-              <input type="text" id="rawTextTitleInput" placeholder="e.g., Summary of Modern Governance Principles" class="glass-input" required>
+              <label for="rawTextTitleInput" data-i18n="supervisor.raw.title_label">Title / Topic Name:</label>
+              <input type="text" id="rawTextTitleInput" data-i18n-attr="placeholder:supervisor.raw.title_placeholder" placeholder="e.g., Summary of Modern Governance Principles" class="glass-input" required>
             </div>
 
             <!-- Metadata Tags: Category & Language -->
             <div class="form-row">
               <div class="form-group">
-                <label for="rawCategorySelect"><i class="fa-solid fa-folder-tree"></i> Category:</label>
+                <label for="rawCategorySelect"><i class="fa-solid fa-folder-tree"></i> <span data-i18n="supervisor.upload.category_label">Category:</span></label>
                 <select id="rawCategorySelect" class="glass-select" required>
-                  <option value="Religion">Religion</option>
-                  <option value="History">History</option>
-                  <option value="Science">Science</option>
-                  <option value="Literature">Literature</option>
-                  <option value="General" selected>General</option>
-                  <option value="Law">Law & Jurisprudence</option>
-                  <option value="Philosophy">Philosophy</option>
-                  <option value="Economics">Economics</option>
+                  <option value="Religion" data-i18n="categories.religion">Religion</option>
+                  <option value="History" data-i18n="categories.history">History</option>
+                  <option value="Science" data-i18n="categories.science">Science</option>
+                  <option value="Literature" data-i18n="categories.literature">Literature</option>
+                  <option value="General" data-i18n="categories.general" selected>General</option>
+                  <option value="Hadith" data-i18n="categories.hadith">Hadith</option>
+                  <option value="Medicine" data-i18n="categories.medicine">Medicine</option>
                 </select>
               </div>
               <div class="form-group">
-                <label for="rawLanguageSelect"><i class="fa-solid fa-language"></i> Language:</label>
+                <label for="rawLanguageSelect"><i class="fa-solid fa-language"></i> <span data-i18n="supervisor.upload.language_label">Language:</span></label>
                 <select id="rawLanguageSelect" class="glass-select" required>
-                  <option value="Arabic" selected>Arabic</option>
-                  <option value="English">English</option>
-                  <option value="Mixed">Mixed</option>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
                 </select>
               </div>
             </div>
 
             <div class="form-group">
               <div class="textarea-header">
-                <label for="rawTextInput">Content:</label>
+                <label for="rawTextInput" data-i18n="supervisor.raw.content_label">Content:</label>
                 <span class="char-counter" id="charCounter">0 characters</span>
               </div>
               <textarea 
                 id="rawTextInput" 
                 class="glass-textarea" 
+                data-i18n-attr="placeholder:supervisor.raw.content_placeholder"
                 placeholder="Paste raw text, lecture notes, or summaries here..." 
                 rows="8"
                 required
@@ -175,7 +177,7 @@
 
             <button type="submit" class="primary-btn" id="startRawTextBtn">
               <i class="fa-solid fa-wand-magic-sparkles"></i>
-              <span>Save to Data Vault & Index Raw Text</span>
+              <span data-i18n="supervisor.raw.btn_submit">Process & Index Raw Text</span>
             </button>
           </form>
         </div>
@@ -185,36 +187,35 @@
       <div class="tab-pane" id="mediaPane">
         <div class="glass-card">
           <div class="card-header">
-            <h3><i class="fa-solid fa-video"></i> Video / Audio Speech-to-Text Transcription</h3>
-            <span class="type-pill" style="color: #38bdf8; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.3);">Gemini Multimodal Transcription</span>
+            <h3><i class="fa-solid fa-video"></i> <span data-i18n="supervisor.media.title">Video / Audio Speech-to-Text Transcription</span></h3>
+            <span class="type-pill" data-i18n="supervisor.media.ai_badge" style="color: #38bdf8; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.3);">Gemini Multimodal Transcription</span>
           </div>
-          <p class="card-desc">Upload recorded speeches, lectures, or fatwas (.mp4, .mp3, .wav, .m4a). Gemini multimodal AI will transcribe the audio verbatim and archive both media and transcript into the Data Vault.</p>
+          <p class="card-desc" data-i18n="supervisor.media.desc">Upload recorded speeches, lectures, or fatwas (.mp4, .mp3, .wav, .m4a). Gemini multimodal AI will transcribe the audio verbatim and archive both media and transcript into the Data Vault.</p>
           
           <form id="mediaForm">
             <div class="form-group">
-              <label for="mediaTitleInput">Media Title / Lecture Topic:</label>
-              <input type="text" id="mediaTitleInput" placeholder="e.g., Friday Khutbah - Financial Transparency (2026)" class="glass-input" required>
+              <label for="mediaTitleInput" data-i18n="supervisor.media.title_label">Media Title / Lecture Topic:</label>
+              <input type="text" id="mediaTitleInput" data-i18n-attr="placeholder:supervisor.media.title_placeholder" placeholder="e.g., Friday Khutbah - Financial Transparency (2026)" class="glass-input" required>
             </div>
 
             <!-- Metadata Tags: Category & Language -->
             <div class="form-row">
               <div class="form-group">
-                <label for="mediaCategorySelect"><i class="fa-solid fa-folder-tree"></i> Category:</label>
+                <label for="mediaCategorySelect"><i class="fa-solid fa-folder-tree"></i> <span data-i18n="supervisor.upload.category_label">Category:</span></label>
                 <select id="mediaCategorySelect" class="glass-select" required>
-                  <option value="Religion" selected>Religion</option>
-                  <option value="History">History</option>
-                  <option value="Science">Science</option>
-                  <option value="Literature">Literature</option>
-                  <option value="General">General</option>
-                  <option value="Law">Law & Jurisprudence</option>
+                  <option value="Religion" data-i18n="categories.religion" selected>Religion</option>
+                  <option value="History" data-i18n="categories.history">History</option>
+                  <option value="Science" data-i18n="categories.science">Science</option>
+                  <option value="Literature" data-i18n="categories.literature">Literature</option>
+                  <option value="General" data-i18n="categories.general">General</option>
                 </select>
               </div>
               <div class="form-group">
-                <label for="mediaLanguageSelect"><i class="fa-solid fa-language"></i> Language:</label>
+                <label for="mediaLanguageSelect"><i class="fa-solid fa-language"></i> <span data-i18n="supervisor.upload.language_label">Language:</span></label>
                 <select id="mediaLanguageSelect" class="glass-select" required>
-                  <option value="Arabic" selected>Arabic</option>
-                  <option value="English">English</option>
-                  <option value="Mixed">Mixed</option>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
                 </select>
               </div>
             </div>
@@ -222,13 +223,13 @@
             <div class="dropzone" id="mediaDropzone" style="border-color: rgba(56, 189, 248, 0.3);">
               <input type="file" id="mediaFileInput" accept=".mp4,.mp3,.wav,.m4a,.ogg,.webm,.mov,.avi,audio/*,video/*" style="display: none;">
               <i class="fa-solid fa-file-audio dropzone-icon" style="color: #38bdf8;"></i>
-              <div class="dropzone-text" id="mediaDropzoneText">Click or Drag & Drop a Video/Audio file (.MP4, .MP3, .WAV, .M4A) here</div>
-              <div class="dropzone-hint">Supported: MP4, MP3, WAV, M4A, WEBM, MOV (Max 100MB)</div>
+              <div class="dropzone-text" id="mediaDropzoneText" data-i18n="supervisor.media.drag_drop">Click or Drag & Drop a Video/Audio file (.MP4, .MP3, .WAV, .M4A) here</div>
+              <div class="dropzone-hint" data-i18n="supervisor.media.supported">Supported: MP4, MP3, WAV, M4A, WEBM, MOV (Max 100MB)</div>
             </div>
 
             <button type="submit" class="primary-btn" id="startMediaUploadBtn" style="background: linear-gradient(135deg, #0284c7, #06b6d4);">
               <i class="fa-solid fa-closed-captioning"></i>
-              <span>Transcribe Speech, Archive & Index</span>
+              <span data-i18n="supervisor.media.btn_submit">Transcribe Speech, Archive & Index</span>
             </button>
           </form>
         </div>
@@ -238,48 +239,47 @@
       <div class="tab-pane" id="urlScraperPane">
         <div class="glass-card">
           <div class="card-header">
-            <h3><i class="fa-solid fa-earth-americas"></i> Web URL Scraper</h3>
+            <h3><i class="fa-solid fa-earth-americas"></i> <span data-i18n="supervisor.url.title">Web URL Scraper</span></h3>
             <span class="type-pill" style="color: #fbbf24; background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3);">Clean HTML Extractor</span>
           </div>
-          <p class="card-desc">Enter any article or web page URL. The engine fetches the page, removes ads and navigation bars, saves the clean text in the Data Vault, and indexes it into the vector database.</p>
+          <p class="card-desc" data-i18n="supervisor.url.desc">Enter any article or web page URL. The engine fetches the page, removes ads and navigation bars, saves the clean text in the Data Vault, and indexes it into the vector database.</p>
           
           <form id="urlScraperForm">
             <div class="form-group">
-              <label for="targetUrlInput">Target Web URL:</label>
-              <input type="url" id="targetUrlInput" placeholder="https://example.com/research-article" class="glass-input" required>
+              <label for="targetUrlInput" data-i18n="supervisor.url.url_label">Target Web URL:</label>
+              <input type="url" id="targetUrlInput" data-i18n-attr="placeholder:supervisor.url.url_placeholder" placeholder="https://example.com/research-article" class="glass-input" required>
             </div>
 
             <div class="form-group">
-              <label for="urlTitleInput">Custom Title (Optional - auto-detected from webpage if empty):</label>
-              <input type="text" id="urlTitleInput" placeholder="e.g., Official Policy Guidance & Protocols" class="glass-input">
+              <label for="urlTitleInput" data-i18n="supervisor.url.title_label">Custom Title (Optional - auto-detected from webpage if empty):</label>
+              <input type="text" id="urlTitleInput" data-i18n-attr="placeholder:supervisor.url.title_placeholder" placeholder="e.g., Official Policy Guidance & Protocols" class="glass-input">
             </div>
 
             <!-- Metadata Tags: Category & Language -->
             <div class="form-row">
               <div class="form-group">
-                <label for="urlCategorySelect"><i class="fa-solid fa-folder-tree"></i> Category:</label>
+                <label for="urlCategorySelect"><i class="fa-solid fa-folder-tree"></i> <span data-i18n="supervisor.upload.category_label">Category:</span></label>
                 <select id="urlCategorySelect" class="glass-select" required>
-                  <option value="Religion">Religion</option>
-                  <option value="History">History</option>
-                  <option value="Science">Science</option>
-                  <option value="Literature">Literature</option>
-                  <option value="General" selected>General</option>
-                  <option value="Law">Law & Jurisprudence</option>
+                  <option value="Religion" data-i18n="categories.religion">Religion</option>
+                  <option value="History" data-i18n="categories.history">History</option>
+                  <option value="Science" data-i18n="categories.science">Science</option>
+                  <option value="Literature" data-i18n="categories.literature">Literature</option>
+                  <option value="General" data-i18n="categories.general" selected>General</option>
                 </select>
               </div>
               <div class="form-group">
-                <label for="urlLanguageSelect"><i class="fa-solid fa-language"></i> Language:</label>
+                <label for="urlLanguageSelect"><i class="fa-solid fa-language"></i> <span data-i18n="supervisor.upload.language_label">Language:</span></label>
                 <select id="urlLanguageSelect" class="glass-select" required>
-                  <option value="Arabic" selected>Arabic</option>
-                  <option value="English">English</option>
-                  <option value="Mixed">Mixed</option>
+                  <option value="Arabic" data-i18n="common.lang_arabic" selected>Arabic</option>
+                  <option value="English" data-i18n="common.lang_english">English</option>
+                  <option value="Mixed" data-i18n="common.lang_mixed">Mixed</option>
                 </select>
               </div>
             </div>
 
             <button type="submit" class="primary-btn" id="startUrlScrapeBtn" style="background: linear-gradient(135deg, #d97706, #f59e0b);">
               <i class="fa-solid fa-globe"></i>
-              <span>Fetch & Index</span>
+              <span data-i18n="supervisor.url.btn_submit">Fetch & Index</span>
             </button>
           </form>
         </div>
@@ -298,12 +298,12 @@
       <section class="history-section glass-card">
         <div class="section-header">
           <div>
-            <h3><i class="fa-solid fa-clock-rotate-left"></i> My Ingested Knowledge Vault</h3>
+            <h3><i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="supervisor.history.title">My Ingested Knowledge Vault</span></h3>
             <p class="section-subtitle">All books, raw texts, transcribed lectures, and scraped URLs indexed under your supervisor identity</p>
           </div>
           <button class="glass-btn btn-sm" id="refreshHistoryBtn">
             <i class="fa-solid fa-rotate-right"></i>
-            <span>Refresh</span>
+            <span data-i18n="supervisor.history.refresh">Refresh</span>
           </button>
         </div>
 
@@ -311,18 +311,18 @@
           <table class="glass-table">
             <thead>
               <tr>
-                <th>Document Title</th>
-                <th>Category</th>
-                <th>Language</th>
-                <th>Source Type</th>
-                <th>Chunks</th>
-                <th>Data Vault File</th>
-                <th>Date Indexed</th>
+                <th data-i18n="supervisor.history.col_title">Document Title</th>
+                <th data-i18n="supervisor.history.col_category">Category</th>
+                <th data-i18n="supervisor.history.col_language">Language</th>
+                <th data-i18n="supervisor.history.col_pages">Pages</th>
+                <th data-i18n="supervisor.history.col_chunks">Chunks</th>
+                <th data-i18n="supervisor.history.col_vault">Data Vault</th>
+                <th data-i18n="supervisor.history.col_date">Date</th>
               </tr>
             </thead>
             <tbody id="historyTableBody">
               <tr>
-                <td colspan="7" class="empty-state">Loading indexed records...</td>
+                <td colspan="7" class="empty-state" data-i18n="supervisor.history.empty">Loading indexed records...</td>
               </tr>
             </tbody>
           </table>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Admin Dashboard - logs.msruq.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <div class="admin-layout">
+    <!-- Top Navigation Bar -->
+    <header class="admin-header">
+      <div class="header-left">
+        <div class="admin-badge">
+          <i class="fa-solid fa-crown"></i>
+        </div>
+        <div>
+          <h1>Super Admin Central Dashboard</h1>
+          <div class="subdomain-tag">
+            <i class="fa-solid fa-server"></i>
+            <span>logs.msruq.com</span>
+            <span class="pulse-indicator"></span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="glass-btn" id="refreshAllBtn">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>Refresh Analytics</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-body">
+      <!-- KPI Stats Grid -->
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon-box" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
+            <i class="fa-solid fa-database"></i>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-label">Total Documents</span>
+            <h2 id="kpiTotalDocs">0</h2>
+            <span class="kpi-sub">Across All Supervisors</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon-box" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
+            <i class="fa-solid fa-book-bookmark"></i>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-label">Books Uploaded</span>
+            <h2 id="kpiTotalBooks">0</h2>
+            <span class="kpi-sub">PDF, TXT, MD Files</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon-box" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee;">
+            <i class="fa-solid fa-paste"></i>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-label">Raw Texts Pasted</span>
+            <h2 id="kpiTotalRawTexts">0</h2>
+            <span class="kpi-sub">Direct Note Ingestions</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon-box" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">
+            <i class="fa-solid fa-diagram-project"></i>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-label">Vector Chunks</span>
+            <h2 id="kpiTotalChunks">0</h2>
+            <span class="kpi-sub">768-dim Embeddings</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-icon-box" style="background: rgba(236, 72, 153, 0.15); color: #f472b6;">
+            <i class="fa-solid fa-file-invoice"></i>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-label">Total Pages Counted</span>
+            <h2 id="kpiTotalPages">0</h2>
+            <span class="kpi-sub">Lifetime Processed Pages</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Supervisor Audit Logs & Page Counting Section -->
+      <section class="audit-section glass-card" style="margin-bottom: 24px;">
+        <div class="section-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+          <div>
+            <h3><i class="fa-solid fa-clipboard-check" style="color: #38bdf8;"></i> Supervisor Audit Logs & Page Counting</h3>
+            <p class="section-desc">Track the exact productivity, page volume, and document ingestion actions of every supervisor down to the minute.</p>
+          </div>
+          <div class="audit-filters-toolbar">
+            <div class="filter-dropdown-box">
+              <i class="fa-solid fa-user-filter"></i>
+              <select id="auditSupervisorFilter" class="glass-select">
+                <option value="ALL">All Supervisors</option>
+              </select>
+            </div>
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="auditSearchInput" placeholder="Filter audit logs by title, category, supervisor...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Aggregated Analytics: Lifetime Totals Cards Grid for Each Supervisor (Above Table) -->
+        <div style="margin-bottom: 12px;">
+          <h4 style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-chart-pie" style="color: #818cf8;"></i> Lifetime Supervisor Productivity Totals
+          </h4>
+          <div class="audit-supervisor-cards-grid" id="auditSupervisorCardsGrid">
+            <div class="loading-state">Loading lifetime supervisor totals...</div>
+          </div>
+        </div>
+
+        <!-- Comprehensive Super Admin Audit Table -->
+        <div class="table-container" style="margin-top: 22px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h4 style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-list-check" style="color: #34d399;"></i> Detailed Ingestion Audit Records
+            </h4>
+            <span id="auditLogCountBadge" class="count-badge">0 documents logged</span>
+          </div>
+          <table class="glass-table">
+            <thead>
+              <tr>
+                <th><i class="fa-solid fa-user-circle"></i> Supervisor Name</th>
+                <th><i class="fa-solid fa-file-lines"></i> Document Title & Category</th>
+                <th><i class="fa-solid fa-copy"></i> Total Pages</th>
+                <th><i class="fa-solid fa-calendar-day"></i> Exact Date & Day</th>
+                <th><i class="fa-solid fa-clock"></i> Exact Time</th>
+                <th><i class="fa-solid fa-vault"></i> Data Vault</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogsTableBody">
+              <tr>
+                <td colspan="6" class="empty-state">Loading supervisor audit logs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Supervisor Analytics & Performance Section -->
+      <section class="supervisors-section glass-card">
+        <div class="section-top">
+          <div>
+            <h3><i class="fa-solid fa-users-gear"></i> Supervisor Profiles & Chunks Breakdown</h3>
+            <p class="section-desc">Click on any supervisor card to inspect their exact indexed documents, upload types, and chunks.</p>
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="supervisorSearchInput" placeholder="Filter supervisors...">
+          </div>
+        </div>
+
+        <!-- Supervisor Cards Grid -->
+        <div class="supervisors-grid" id="supervisorsGrid">
+          <div class="loading-state">Loading supervisor analytics...</div>
+        </div>
+      </section>
+
+      <!-- Dynamic Category Management Section (CRUD) -->
+      <section class="categories-section glass-card" style="margin-top: 24px;">
+        <div class="section-top" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h3><i class="fa-solid fa-folder-tree"></i> Dynamic Category Management</h3>
+            <p class="section-desc">Manage taxonomy categories for the Knowledge Base. Changes instantly update the Supervisor ingestion dropdowns.</p>
+          </div>
+          <button class="primary-btn" id="openAddCategoryModalBtn" style="background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff; padding: 10px 18px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add New Category</span>
+          </button>
+        </div>
+
+        <div class="table-container">
+          <table class="glass-table">
+            <thead>
+              <tr>
+                <th>Category Name</th>
+                <th>Description</th>
+                <th>Created Date</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="categoriesTableBody">
+              <tr>
+                <td colspan="4" class="empty-state">Loading dynamic categories...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: Category Add / Edit -->
+  <div class="modal-overlay" id="categoryModal">
+    <div class="modal-card glass-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <div class="user-avatar-lg" style="background: rgba(99, 102, 241, 0.2); color: #818cf8;">
+            <i class="fa-solid fa-tag"></i>
+          </div>
+          <div>
+            <h2 id="categoryModalTitle">Add New Category</h2>
+            <span class="modal-email">Manage taxonomy tag for Knowledge Base</span>
+          </div>
+        </div>
+        <button class="close-btn" id="closeCategoryModalBtn">&times;</button>
+      </div>
+
+      <form id="categoryForm" style="margin-top: 16px;">
+        <input type="hidden" id="editCategoryId">
+        
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label for="categoryNameInput" style="display:block; font-size: 13px; font-weight:600; margin-bottom: 6px; color: var(--text-main);">Category Name *</label>
+          <input type="text" id="categoryNameInput" class="glass-input" placeholder="e.g., Hadith, Medicine, Arabic Language..." required style="width: 100%; padding: 10px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label for="categoryDescInput" style="display:block; font-size: 13px; font-weight:600; margin-bottom: 6px; color: var(--text-main);">Description (Optional)</label>
+          <textarea id="categoryDescInput" class="glass-textarea" rows="3" placeholder="Brief note about the scope of this category..." style="width: 100%; padding: 10px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff; font-family: inherit; font-size: 13px;"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="glass-btn" id="cancelCategoryModalBtn" style="padding: 9px 16px; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); color: #fff; cursor: pointer;">Cancel</button>
+          <button type="submit" class="primary-btn" id="saveCategoryBtn" style="padding: 9px 20px; border-radius: 8px; background: linear-gradient(135deg, #4f46e5, #6366f1); border: none; color: #fff; font-weight: 600; cursor: pointer;">Save Category</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Supervisor Drill-Down Detailed Analytics -->
+  <div class="modal-overlay" id="supervisorModal">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <div class="user-avatar-lg">
+            <i class="fa-solid fa-user-shield"></i>
+          </div>
+          <div>
+            <h2 id="modalSupervisorName">Supervisor Profile</h2>
+            <span class="modal-email" id="modalSupervisorEmail">email@masruq.com</span>
+          </div>
+        </div>
+        <button class="close-btn" id="closeSupervisorModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Supervisor Performance Summary -->
+        <div class="modal-stats-row">
+          <div class="stat-pill">
+            <i class="fa-solid fa-book" style="color: #34d399;"></i>
+            <span>Books: <strong id="modalBooksCount">0</strong></span>
+          </div>
+          <div class="stat-pill">
+            <i class="fa-solid fa-file-invoice" style="color: #f472b6;"></i>
+            <span>Total Pages: <strong id="modalPagesCount">0</strong></span>
+          </div>
+          <div class="stat-pill">
+            <i class="fa-solid fa-paste" style="color: #60a5fa;"></i>
+            <span>Raw Texts: <strong id="modalRawCount">0</strong></span>
+          </div>
+          <div class="stat-pill">
+            <i class="fa-solid fa-layer-group" style="color: #fbbf24;"></i>
+            <span>Total Chunks: <strong id="modalChunksCount">0</strong></span>
+          </div>
+        </div>
+
+        <!-- Detailed Documents Table -->
+        <div class="table-container">
+          <h4><i class="fa-solid fa-table-list"></i> Indexed Documents Breakdown</h4>
+          <table class="glass-table">
+            <thead>
+              <tr>
+                <th>Document Title</th>
+                <th>Category</th>
+                <th>Language</th>
+                <th>Pages</th>
+                <th>Method</th>
+                <th>Chunks</th>
+                <th>Data Vault File</th>
+                <th>Date Indexed</th>
+              </tr>
+            </thead>
+            <tbody id="modalDocsTableBody">
+              <!-- Dynamically rendered -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

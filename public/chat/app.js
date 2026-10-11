@@ -7,13 +7,25 @@ const chatForm = document.getElementById('chatForm');
 const queryInput = document.getElementById('queryInput');
 const sendBtn = document.getElementById('sendBtn');
 const connectionStatus = document.getElementById('connectionStatus');
-const clearChatBtn = document.getElementById('clearChatBtn');
+const langToggleBtn = document.getElementById('langToggleBtn');
+const currentLangLabel = document.getElementById('currentLangLabel');
+
+function updateLangUi(lang) {
+  if (currentLangLabel) {
+    currentLangLabel.textContent = (lang || 'en').toUpperCase();
+  }
+}
 
 function initWelcomeMessage() {
   messagesContainer.innerHTML = '';
+  const isAr = window.i18n && window.i18n.currentLang === 'ar';
+  const welcomeText = isAr
+    ? window.i18n.t('chat.welcome', 'Welcome to Private Assistant')
+    : `Hello! I am your **Private Knowledge Assistant**.\n\nAsk me any question about the books and notes in your private repository. My answers are strictly retrieved from your verified materials without hallucinations.`;
+
   renderMessage({
     sender: 'assistant',
-    text: `Hello! I am your **Private Knowledge Assistant**.\n\nAsk me any question about the books and notes in your private repository. My answers are strictly retrieved from your verified materials without hallucinations.`,
+    text: welcomeText,
     sources: [],
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   });
@@ -25,12 +37,14 @@ async function checkBackendHealth() {
     const res = await fetch('/health');
     if (res.ok) {
       connectionStatus.querySelector('.status-dot').classList.add('connected');
-      connectionStatus.querySelector('.status-text').textContent = 'Search Index Active';
+      const text = window.i18n ? window.i18n.t('chat.connected', 'Connected to Private Knowledge Base') : 'Search Index Active';
+      connectionStatus.querySelector('.status-text').textContent = text;
       return true;
     }
   } catch (err) {
     connectionStatus.querySelector('.status-dot').classList.remove('connected');
-    connectionStatus.querySelector('.status-text').textContent = 'Index Offline';
+    const text = window.i18n ? window.i18n.t('chat.connecting', 'Connecting to Knowledge Base...') : 'Index Offline';
+    connectionStatus.querySelector('.status-text').textContent = text;
   }
   return false;
 }
@@ -191,20 +205,45 @@ queryInput.addEventListener('keydown', function(e) {
 
 chatForm.addEventListener('submit', handleChatSubmit);
 
+const clearChatBtn = document.getElementById('clearChatBtn');
+
+if (langToggleBtn) {
+  langToggleBtn.addEventListener('click', async () => {
+    if (window.i18n) {
+      const newLang = await window.i18n.toggleLanguage();
+      updateLangUi(newLang);
+      initWelcomeMessage();
+    }
+  });
+}
+
 document.querySelectorAll('.suggestion-chip').forEach(chip => {
   chip.addEventListener('click', () => {
-    queryInput.value = chip.dataset.prompt;
+    const promptKey = chip.getAttribute('data-prompt-key');
+    const promptText = (window.i18n && promptKey) ? window.i18n.t(promptKey, chip.textContent.trim()) : chip.textContent.trim();
+    queryInput.value = promptText;
     handleChatSubmit();
   });
 });
 
-clearChatBtn.addEventListener('click', () => {
-  if (confirm('Clear current conversation history?')) {
-    initWelcomeMessage();
-  }
-});
+if (clearChatBtn) {
+  clearChatBtn.addEventListener('click', () => {
+    if (confirm('Clear current conversation history?')) {
+      initWelcomeMessage();
+    }
+  });
+}
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  if (window.i18n) {
+    await window.i18n.init({
+      defaultLang: 'en',
+      allowedLangs: ['en', 'ar'],
+      onChange: (lang) => {
+        updateLangUi(lang);
+      }
+    });
+  }
   initWelcomeMessage();
   checkBackendHealth();
   setInterval(checkBackendHealth, 10000);

@@ -436,7 +436,16 @@ refreshHistoryBtn.addEventListener('click', () => {
   loadSupervisorHistory();
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  if (window.i18n) {
+    await window.i18n.init({
+      defaultLang: 'ar',
+      allowedLangs: ['ar', 'en'],
+      onChange: () => {
+        if (window.i18n) window.i18n.applyTranslations();
+      }
+    });
+  }
   loadDynamicCategories();
   loadSupervisorHistory();
 });

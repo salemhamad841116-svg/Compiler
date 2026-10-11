@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Private AI Search - bahth.masruq.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+  <script src="/js/i18n.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow effects -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <div class="app-layout">
+    <!-- Top Glass Navigation Bar (Strict User Search - No Upload Controls) -->
+    <header class="glass-header">
+      <div class="header-left">
+        <div class="logo-badge">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div class="brand-info">
+          <h1 data-i18n="chat.title">Private Knowledge Search</h1>
+          <div class="connection-status" id="connectionStatus">
+            <span class="status-dot"></span>
+            <span class="status-text" id="statusText" data-i18n="chat.connecting">Connecting to Knowledge Base...</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <!-- Bilingual Language Toggle Button (EN / AR) -->
+        <button class="glass-btn btn-sm lang-toggle-btn" id="langToggleBtn" title="Toggle Language">
+          <i class="fa-solid fa-language"></i>
+          <span id="currentLangLabel">EN</span>
+        </button>
+        <div class="subdomain-tag">
+          <i class="fa-solid fa-globe"></i>
+          <span>bahth.masruq.com</span>
+        </div>
+        <button class="glass-btn btn-icon" id="clearChatBtn" data-i18n-attr="title:chat.clear_chat">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Chat Workspace -->
+    <main class="chat-workspace">
+      <!-- Chat Messages Container -->
+      <div class="messages-container" id="messagesContainer">
+        <!-- Messages dynamically rendered here -->
+      </div>
+
+      <!-- Quick Suggestion Starter Prompts -->
+      <div class="suggestions-container" id="suggestionsContainer">
+        <div class="suggestions-title">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span data-i18n="chat.suggestions_title">Quick Starter Prompts</span>
+        </div>
+        <div class="suggestions-grid">
+          <button class="suggestion-chip" id="chipPrompt1" data-i18n="chat.prompt_1" data-prompt-key="chat.prompt_1">
+            What are the main principles and core ideas?
+          </button>
+          <button class="suggestion-chip" id="chipPrompt2" data-i18n="chat.prompt_2" data-prompt-key="chat.prompt_2">
+            Summarize key takeaways & methodologies
+          </button>
+          <button class="suggestion-chip" id="chipPrompt3" data-i18n="chat.prompt_3" data-prompt-key="chat.prompt_3">
+            Compare arguments across chapters
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom Glass Input Area -->
+      <div class="input-wrapper">
+        <form class="glass-input-box" id="chatForm">
+          <textarea 
+            id="queryInput" 
+            data-i18n-attr="placeholder:chat.placeholder"
+            placeholder="Ask anything strictly based on your knowledge base books and notes..." 
+            rows="1"
+            autocomplete="off"
+          ></textarea>
+          <button type="submit" class="send-btn" id="sendBtn" data-i18n-attr="title:chat.send">
+            <i class="fa-solid fa-arrow-up"></i>
+          </button>
+        </form>
+        <div class="input-footer">
+          <i class="fa-solid fa-lock"></i>
+          <span data-i18n="chat.footer">End-User Isolation Mode • Zero Hallucinations • Answers verified against vector index.</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

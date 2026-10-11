@@ -56,8 +56,11 @@ app.use('/api/ingestion', ingestionRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/locales', require('./routes/localeRoutes'));
 
-// Static assets per isolated tier
+// Static assets per isolated tier & shared localization assets
+app.use('/locales', express.static(path.join(__dirname, '../public/locales')));
+app.use('/js', express.static(path.join(__dirname, '../public/js')));
 app.use('/chat', express.static(path.join(__dirname, '../public/chat')));
 app.use('/supervisor', express.static(path.join(__dirname, '../public/supervisor')));
 app.use('/admin', express.static(path.join(__dirname, '../public/admin')));

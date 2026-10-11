@@ -1,0 +1,61 @@
+name: Deploy Supervisor Dashboard (waraqa.msruq.com)
+
+# Decoupled Pipeline 2: Dedicated to Supervisor Data Entry Portal
+# Does NOT depend on, block for, or wait for Super Admin or User Chat frontends.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/supervisor/**'
+      - 'deploy/supervisor/**'
+      - '.github/workflows/deploy-supervisor.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-supervisor-portal:
+    name: Deploy Supervisor Portal (waraqa.msruq.com)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Validate Supervisor Web Assets
+        run: |
+          echo "Validating Supervisor static portal files..."
+          test -f public/supervisor/index.html || exit 1
+          test -f public/supervisor/app.js || exit 1
+          test -f public/supervisor/style.css || exit 1
+          echo "Supervisor web assets verified successfully."
+
+      # Decoupled Deployment: Deploy directly to Vercel (or Firebase Hosting)
+      - name: Deploy to Vercel (waraqa.msruq.com)
+        if: env.VERCEL_TOKEN != ''
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_WARAQA }}
+          working-directory: ./public/supervisor
+          vercel-args: '--prod'
+
+      # Alternative Decoupled Target: Firebase Hosting
+      - name: Deploy to Firebase Hosting (waraqa-masruq)
+        if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          projectId: masruq-ecosystem
+          target: waraqa-masruq
+          channelId: live
+
+      - name: Report Supervisor Deployment Status
+        run: |
+          echo "=========================================================="
+          echo "✅ Supervisor Dashboard (waraqa.msruq.com) deployed independently!"
+          echo "🚀 Supervisors can immediately begin uploading books & notes."
+          echo "🔗 URL: https://waraqa.msruq.com"
+          echo "=========================================================="

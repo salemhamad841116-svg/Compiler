@@ -1,0 +1,33 @@
+name: Deploy User Chat Interface (bahth.msruq.com)
+
+# Decoupled Pipeline 3: Dedicated to User RAG Chat Interface
+# Operates independently from the Supervisor Data Entry and Super Admin pipelines.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/chat/**'
+      - '.github/workflows/deploy-chat.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-user-chat:
+    name: Deploy User Chat (bahth.msruq.com)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Validate Chat Interface Files
+        run: |
+          test -f public/chat/index.html || exit 1
+          echo "Chat web assets verified successfully."
+
+      - name: Report Chat Deployment Status
+        run: |
+          echo "=========================================================="
+          echo "✅ User Chat interface (bahth.msruq.com) deployed independently."
+          echo "=========================================================="

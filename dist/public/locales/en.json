@@ -1,0 +1,112 @@
+{
+  "chat": {
+    "title": "Private Knowledge Search",
+    "connecting": "Connecting to Knowledge Base...",
+    "connected": "Connected to Private Knowledge Base",
+    "clear_chat": "Clear Conversation",
+    "suggestions_title": "Quick Starter Prompts",
+    "prompt_1": "What are the main principles and core ideas?",
+    "prompt_2": "Summarize key takeaways & methodologies",
+    "prompt_3": "Compare arguments across chapters",
+    "placeholder": "Ask anything strictly based on your knowledge base books and notes...",
+    "send": "Send Question",
+    "footer": "End-User Isolation Mode • Zero Hallucinations • Answers verified against vector index.",
+    "language": "Language",
+    "sources": "Sources Consulted:",
+    "similarity": "Similarity:",
+    "thinking": "Searching knowledge index...",
+    "error_empty": "Please enter a question before sending.",
+    "error_server": "Failed to fetch answer from assistant. Please try again."
+  },
+  "supervisor": {
+    "header": {
+      "title": "Supervisor Data Ingestion Hub",
+      "subtitle": "waraqa.msruq.com • Data Vault Archival Engine",
+      "active": "Active Supervisor:",
+      "custom": "Custom ID / Email..."
+    },
+    "tabs": {
+      "document": "Document File (.PDF, .TXT, .MD)",
+      "raw_text": "Paste Raw Text",
+      "media": "Video / Audio (Speech-to-Text)",
+      "url": "Web URL Scraper"
+    },
+    "upload": {
+      "title": "Upload Document (.PDF, .TXT, .MD)",
+      "vault_badge": "Data Vault Archival",
+      "desc": "Upload books, research papers, or articles. Files are permanently archived in the Data Vault and embedded via text-embedding-004.",
+      "doc_title_label": "Document Title (Optional):",
+      "doc_title_placeholder": "e.g., Islamic Jurisprudence & Ethical Leadership",
+      "category_label": "Category:",
+      "language_label": "Language:",
+      "drag_drop": "Drag and drop your file here, or click to browse",
+      "supported": "Supported: .pdf, .txt, .md (Max 100MB)",
+      "btn_submit": "Upload & Index Document"
+    },
+    "raw": {
+      "title": "Paste Raw Text Notes or Excerpts",
+      "desc": "Directly paste text content from articles, lectures, or summaries. It will be archived into a permanent text file in the Data Vault.",
+      "title_label": "Document Title / Topic:",
+      "title_placeholder": "e.g., Chapter 4 Key Takeaways",
+      "content_label": "Raw Text Content:",
+      "content_placeholder": "Paste your text content here...",
+      "btn_submit": "Process & Index Raw Text"
+    },
+    "media": {
+      "title": "Video / Audio Ingestion (Speech-to-Text)",
+      "ai_badge": "Gemini Multimodal Transcription",
+      "desc": "Upload audio recordings or lecture videos. Audio is transcribed to text, stored in the Data Vault, and indexed into the vector store.",
+      "title_label": "Media Title:",
+      "title_placeholder": "e.g., Friday Lecture on Ethics",
+      "drag_drop": "Drag and drop audio or video file here",
+      "supported": "Supported: .mp3, .wav, .m4a, .mp4, .mov, .webm",
+      "btn_submit": "Transcribe & Index Media"
+    },
+    "url": {
+      "title": "Web URL Content Scraper",
+      "desc": "Automatically scrape article content, research posts, or fatwas from web links without requiring API keys.",
+      "url_label": "Target Web URL:",
+      "url_placeholder": "https://example.com/article-or-fatwa",
+      "title_label": "Document Title (Optional):",
+      "title_placeholder": "Extracted from webpage if omitted",
+      "btn_submit": "Scrape, Archive & Index URL"
+    },
+    "history": {
+      "title": "Recent Ingestion History",
+      "refresh": "Refresh",
+      "col_title": "Document Title",
+      "col_category": "Category",
+      "col_language": "Language",
+      "col_pages": "Pages",
+      "col_chunks": "Chunks",
+      "col_vault": "Data Vault",
+      "col_date": "Date",
+      "empty": "No documents ingested yet.",
+      "download": "Download"
+    },
+    "status": {
+      "uploading": "Uploading and parsing document...",
+      "indexing": "Generating vector embeddings...",
+      "success": "Document successfully ingested and archived!",
+      "error": "Ingestion failed:"
+    }
+  },
+  "common": {
+    "lang_arabic": "Arabic",
+    "lang_english": "English",
+    "lang_mixed": "Mixed (Arabic & English)"
+  },
+  "categories": {
+    "religion": "Religion",
+    "history": "History",
+    "science": "Science",
+    "literature": "Literature",
+    "general": "General",
+    "hadith": "Hadith",
+    "medicine": "Medicine",
+    "english_lang": "English Language",
+    "arabic_lang": "Arabic Language",
+    "arabic_dict": "Arabic Dictionary",
+    "english_dict": "English Dictionary"
+  }
+}
