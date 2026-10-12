@@ -26,7 +26,7 @@ jobs:
       - name: Set up Node.js Environment
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Dependencies
@@ -35,6 +35,9 @@ jobs:
       - name: Verify Backend Integrity & Syntax
         run: |
           node -e "require('./src/server.js'); console.log('Backend syntax and models verified!'); process.exit(0);"
+
+      - name: Run Acceptance Tests
+        run: npm test
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

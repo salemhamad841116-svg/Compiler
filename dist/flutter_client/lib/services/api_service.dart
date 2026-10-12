@@ -12,6 +12,51 @@ class ApiService {
 
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
+  /// Bearer token issued by POST /api/auth/login (client: mobile).
+  String? _authToken;
+  String? currentUserEmail;
+  String? currentUserRole;
+
+  bool get isAuthenticated => _authToken != null;
+
+  Map<String, String> _authHeaders([Map<String, String>? extra]) => {
+        if (_authToken != null) 'Authorization': 'Bearer $_authToken',
+        ...?extra,
+      };
+
+  /// Authenticates against the server; throws with the server error message on failure.
+  Future<void> login(String email, String password) async {
+    final response = await _client
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email.trim(), 'password': password, 'client': 'mobile'}),
+        )
+        .timeout(ApiConfig.connectTimeout);
+    Map<String, dynamic> data = {};
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {}
+    if (response.statusCode != 200 || data['token'] == null) {
+      throw Exception(data['error'] ?? 'Login failed (${response.statusCode})');
+    }
+    _authToken = data['token'] as String;
+    final user = data['user'] as Map<String, dynamic>? ?? {};
+    currentUserEmail = user['email'] as String?;
+    currentUserRole = user['role'] as String?;
+  }
+
+  Future<void> logout() async {
+    try {
+      await _client
+          .post(Uri.parse('${ApiConfig.baseUrl}/api/auth/logout'), headers: _authHeaders())
+          .timeout(ApiConfig.connectTimeout);
+    } catch (_) {}
+    _authToken = null;
+    currentUserEmail = null;
+    currentUserRole = null;
+  }
+
   Future<bool> checkHealth() async {
     try {
       final response = await _client
@@ -28,7 +73,7 @@ class ApiService {
   Future<List<CategoryItem>> getCategories() async {
     try {
       final url = Uri.parse(ApiConfig.categoriesEndpoint);
-      final response = await _client.get(url).timeout(ApiConfig.connectTimeout);
+      final response = await _client.get(url, headers: _authHeaders()).timeout(ApiConfig.connectTimeout);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -62,7 +107,7 @@ class ApiService {
       final response = await _client
           .post(
             url,
-            headers: {'Content-Type': 'application/json'},
+            headers: _authHeaders({'Content-Type': 'application/json'}),
             body: body,
           )
           .timeout(ApiConfig.receiveTimeout);
@@ -124,6 +169,7 @@ class ApiService {
         mediaType = MediaType('image', 'webp');
       }
 
+      request.headers.addAll(_authHeaders());
       final multipartFile = await http.MultipartFile.fromPath(
         'bookFile',
         filePath,
@@ -135,8 +181,6 @@ class ApiService {
         request.fields['title'] = customTitle.trim();
       }
       if (supervisorId != null && supervisorId.trim().isNotEmpty) {
-        request.fields['uploadedBy'] = supervisorId.trim();
-        request.headers['X-Supervisor-ID'] = supervisorId.trim();
       }
       request.fields['category'] = category.trim().isEmpty ? 'General' : category.trim();
       request.fields['language'] = language.trim().isEmpty ? 'Arabic' : language.trim();
@@ -180,7 +224,6 @@ class ApiService {
       final body = jsonEncode({
         'title': title,
         'textContent': textContent,
-        if (supervisorId != null) 'uploadedBy': supervisorId,
         'category': category.trim().isEmpty ? 'General' : category.trim(),
         'language': language.trim().isEmpty ? 'Arabic' : language.trim(),
         if (chunkSize != null) 'chunkSize': chunkSize,
@@ -190,10 +233,7 @@ class ApiService {
       final response = await _client
           .post(
             url,
-            headers: {
-              'Content-Type': 'application/json',
-              if (supervisorId != null) 'X-Supervisor-ID': supervisorId,
-            },
+            headers: _authHeaders({'Content-Type': 'application/json'}),
             body: body,
           )
           .timeout(ApiConfig.receiveTimeout);
@@ -236,6 +276,7 @@ class ApiService {
         mediaType = MediaType('video', ext);
       }
 
+      request.headers.addAll(_authHeaders());
       final multipartFile = await http.MultipartFile.fromPath(
         'mediaFile',
         filePath,
@@ -245,8 +286,6 @@ class ApiService {
 
       request.fields['title'] = title.trim();
       if (supervisorId != null && supervisorId.trim().isNotEmpty) {
-        request.fields['uploadedBy'] = supervisorId.trim();
-        request.headers['X-Supervisor-ID'] = supervisorId.trim();
       }
       request.fields['category'] = category.trim().isEmpty ? 'General' : category.trim();
       request.fields['language'] = language.trim().isEmpty ? 'Arabic' : language.trim();
@@ -282,7 +321,6 @@ class ApiService {
       final body = jsonEncode({
         'url': url,
         if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
-        if (supervisorId != null) 'uploadedBy': supervisorId,
         'category': category.trim().isEmpty ? 'General' : category.trim(),
         'language': language.trim().isEmpty ? 'Arabic' : language.trim(),
         if (chunkSize != null) 'chunkSize': chunkSize,
@@ -292,10 +330,7 @@ class ApiService {
       final response = await _client
           .post(
             endpoint,
-            headers: {
-              'Content-Type': 'application/json',
-              if (supervisorId != null) 'X-Supervisor-ID': supervisorId,
-            },
+            headers: _authHeaders({'Content-Type': 'application/json'}),
             body: body,
           )
           .timeout(ApiConfig.receiveTimeout);
@@ -314,7 +349,7 @@ class ApiService {
   Future<List<BookItem>> getIndexedBooks() async {
     try {
       final url = Uri.parse(ApiConfig.booksListEndpoint);
-      final response = await _client.get(url).timeout(ApiConfig.connectTimeout);
+      final response = await _client.get(url, headers: _authHeaders()).timeout(ApiConfig.connectTimeout);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;

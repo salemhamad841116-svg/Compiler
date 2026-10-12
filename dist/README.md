@@ -84,3 +84,13 @@ npm run dev
 - **Upload Book (PDF)**: `POST http://localhost:5000/api/ingestion/upload-book`
 - **List Books**: `GET http://localhost:5000/api/ingestion/books`
 - **Ask Question**: `POST http://localhost:5000/api/chat/query`
+
+## Operations notes (admin system)
+
+- Requires Node 22.5+ (uses node:sqlite).
+- Persist DATA_DIR (database, vault, uploads) on a durable volume; otherwise accounts and records vanish on redeploy.
+- Set a real GEMINI_API_KEY; without it uploads that need OCR or embeddings fail with AI_NOT_CONFIGURED / AI_KEY_INVALID (shown in the UI, never as fake success).
+- First start creates the admin account from ADMIN_EMAIL / ADMIN_INITIAL_PASSWORD / ADMIN_NAME.
+- Supervisors are invited from the admin panel (one-time activation link, 72 h).
+- Run npm test for acceptance tests; node scripts/check-i18n.js for the localization audit; node scripts/verify-deployment.js against deployed URLs.
+- Existing records can be repaired from Admin > System > Reconciliation (analyze first, then apply).

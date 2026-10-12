@@ -29,11 +29,56 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
   final TextEditingController _urlInputController = TextEditingController();
   final TextEditingController _urlTitleController = TextEditingController();
 
-  final List<String> _supervisorList = [
-    'supervisor_ahmed@masruq.com',
-    'supervisor_fatima@masruq.com',
-    'supervisor_omar@masruq.com',
-  ];
+  final TextEditingController _loginEmailController = TextEditingController();
+  final TextEditingController _loginPasswordController = TextEditingController();
+
+  Widget _buildLoginForm(BuildContext context, IngestionProvider provider) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Supervisor sign in',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _loginEmailController,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.username],
+                decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _loginPasswordController,
+                obscureText: true,
+                autofillHints: const [AutofillHints.password],
+                decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                onSubmitted: (_) => provider.login(_loginEmailController.text, _loginPasswordController.text),
+              ),
+              if (provider.loginError != null) ...[
+                const SizedBox(height: 12),
+                Text(provider.loginError!, style: const TextStyle(color: Colors.redAccent)),
+              ],
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: provider.isLoggingIn
+                    ? null
+                    : () => provider.login(_loginEmailController.text, _loginPasswordController.text),
+                child: provider.isLoggingIn
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Sign in'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -43,6 +88,8 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
     _mediaTitleController.dispose();
     _urlInputController.dispose();
     _urlTitleController.dispose();
+    _loginEmailController.dispose();
+    _loginPasswordController.dispose();
     super.dispose();
   }
 
@@ -73,39 +120,27 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
               ],
             ),
             actions: [
-              // Supervisor Selector Dropdown
-              Padding(
-                padding: const EdgeInsets.only(right: 12.0),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _supervisorList.contains(ingestionProvider.activeSupervisorId)
-                        ? ingestionProvider.activeSupervisorId
-                        : _supervisorList.first,
-                    dropdownColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    items: _supervisorList.map((email) {
-                      return DropdownMenuItem<String>(
-                        value: email,
-                        child: Row(
-                          children: [
-                            const Icon(Icons.person_pin, size: 16, color: Color(0xFF10B981)),
-                            const SizedBox(width: 6),
-                            Text(
-                              isDesktop ? email : email.split('@').first,
-                              style: const TextStyle(fontSize: 12.5),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        ingestionProvider.setActiveSupervisor(val);
-                      }
-                    },
+              if (ingestionProvider.isAuthenticated)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_pin, size: 16, color: Color(0xFF10B981)),
+                      const SizedBox(width: 6),
+                      Text(
+                        isDesktop
+                            ? ingestionProvider.activeSupervisorId
+                            : ingestionProvider.activeSupervisorId.split('@').first,
+                        style: const TextStyle(fontSize: 12.5),
+                      ),
+                      IconButton(
+                        tooltip: 'Sign out',
+                        icon: const Icon(Icons.logout, size: 18),
+                        onPressed: () => ingestionProvider.logout(),
+                      ),
+                    ],
                   ),
                 ),
-              ),
             ],
           ),
           body: Container(
@@ -121,9 +156,11 @@ class _SupervisorDashboardScreenState extends State<SupervisorDashboardScreen> {
             child: SafeArea(
               top: false,
               bottom: true,
-              child: isDesktop
-                  ? _buildDesktopLayout(context, ingestionProvider)
-                  : _buildMobileLayout(context, ingestionProvider),
+              child: !ingestionProvider.isAuthenticated
+                  ? _buildLoginForm(context, ingestionProvider)
+                  : isDesktop
+                      ? _buildDesktopLayout(context, ingestionProvider)
+                      : _buildMobileLayout(context, ingestionProvider),
             ),
           ),
           // Mobile Thumb-Friendly Bottom Navigation Bar

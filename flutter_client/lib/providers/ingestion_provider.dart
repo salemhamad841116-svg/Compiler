@@ -18,7 +18,9 @@ class IngestionProvider with ChangeNotifier {
   IngestionStatus _status = IngestionStatus.idle;
   String? _statusMessage;
   String? _errorMessage;
-  String _activeSupervisorId = 'supervisor_ahmed@masruq.com';
+  String _activeSupervisorId = '';
+  bool _isLoggingIn = false;
+  String? _loginError;
 
   IngestionProvider({required ApiService apiService}) : _apiService = apiService {
     fetchCategories();
@@ -37,8 +39,34 @@ class IngestionProvider with ChangeNotifier {
   String get activeSupervisorId => _activeSupervisorId;
   int get totalIndexedChunks => _books.fold(0, (sum, b) => sum + b.totalChunks);
 
-  void setActiveSupervisor(String supervisorEmail) {
-    _activeSupervisorId = supervisorEmail.trim();
+  bool get isAuthenticated => _apiService.isAuthenticated;
+  bool get isLoggingIn => _isLoggingIn;
+  String? get loginError => _loginError;
+
+  /// Real server-side authentication (replaces the former free-text supervisor selector).
+  Future<bool> login(String email, String password) async {
+    _isLoggingIn = true;
+    _loginError = null;
+    notifyListeners();
+    try {
+      await _apiService.login(email, password);
+      _activeSupervisorId = _apiService.currentUserEmail ?? email.trim();
+      await fetchCategories();
+      await fetchBooks();
+      return true;
+    } catch (e) {
+      _loginError = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _isLoggingIn = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> logout() async {
+    await _apiService.logout();
+    _activeSupervisorId = '';
+    _books = [];
     notifyListeners();
   }
 

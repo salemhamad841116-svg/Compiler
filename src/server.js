@@ -81,6 +81,7 @@ function createApp() {
   const staticOpts = { index: false, fallthrough: true, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') };
   app.use('/locales', express.static(path.join(PUBLIC_DIR, 'locales'), staticOpts));
   app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), staticOpts));
+  app.use('/css', express.static(path.join(PUBLIC_DIR, 'css'), staticOpts));
 
   // Host-based tier dispatch happens BEFORE any static handler so that a tier's files are never
   // served on another tier's host (previous version served the chat page on every host's "/").
@@ -96,7 +97,8 @@ function createApp() {
 
   // Path-based tiers for single-host deployments
   for (const name of ['chat', 'supervisor', 'admin']) {
-    app.get(`/${name}`, (req, res) => res.redirect(301, `/${name}/`));
+    // Exact match only (Express routing is non-strict, so app.get('/admin') would also match '/admin/' and loop).
+    app.use((req, res, next) => (req.path === `/${name}` && (req.method === 'GET' || req.method === 'HEAD') ? res.redirect(301, `/${name}/${req.url.slice(req.path.length)}`) : next()));
     app.use(`/${name}`, (req, res, next) => (tierFor(req) ? next() : tierStatics[name](req, res, next)));
   }
   // Default (no recognised host): chat interface at the site root

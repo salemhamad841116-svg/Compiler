@@ -1,168 +1,183 @@
 const fs = require('fs');
 const path = require('path');
-
-// Production-Ready Data Vault directory with persistent volume support
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
-const LOCAL_VAULT_DIR = process.env.DATA_VAULT_PATH || path.join(DATA_DIR, 'vault');
-
-// Ensure local vault storage directory exists with recursive directory structure
-if (!fs.existsSync(LOCAL_VAULT_DIR)) {
-  fs.mkdirSync(LOCAL_VAULT_DIR, { recursive: true });
-}
+const crypto = require('crypto');
+const config = require('../config');
 
 /**
- * Storage Service handling permanent file archiving to Google Cloud / Firebase Storage
- * or the dedicated Local Data Vault with direct URL references.
+ * Data Vault: permanent file storage. Files are stored under docs/<yyyy-mm>/<documentId>_<name>
+ * independent of category so renaming/reassigning a category never moves or orphans a file.
+ * Optionally mirrored to Google Cloud Storage when GCS_BUCKET_NAME is set AND @google-cloud/storage is installed.
+ * The storage reference only claims gs:// when the mirror upload really succeeded.
  */
 class StorageService {
-  constructor() {
-    this.bucketName = process.env.GCS_BUCKET_NAME || process.env.FIREBASE_STORAGE_BUCKET || 'private-rag-raw-books-vault';
-    this.useCloudStorage = Boolean(process.env.GCS_BUCKET_NAME || process.env.FIREBASE_STORAGE_BUCKET);
-    this.vaultDir = LOCAL_VAULT_DIR;
+  get vaultDir() {
+    return config.vaultDir;
   }
 
-  /**
-   * Sanitizes a string for safe filename and folder generation.
-   * @param {string} name
-   * @returns {string}
-   */
   sanitizeFilename(name) {
-    return (name || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+    return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'file';
   }
 
-  /**
-   * Permanently archives an uploaded file into the Data Vault organized by category.
-   *
-   * @param {string} tempFilePath - Temporary file path on disk.
-   * @param {string} originalFilename - Original name of the document.
-   * @param {string} supervisorId - Email/ID of uploading supervisor.
-   * @param {string} category - Document category (e.g. Religion, History, Science).
-   * @returns {Promise<{ vaultPath: string, storageReference: string, rawFileUrl: string, fileSize: number, category: string }>}
-   */
-  async saveUploadedFileToVault(tempFilePath, originalFilename, supervisorId = 'supervisor_default', category = 'General') {
-    if (!fs.existsSync(tempFilePath)) {
-      throw new Error(`Temp file not found at path: ${tempFilePath}`);
-    }
-
-    const fileStats = fs.statSync(tempFilePath);
-    const sanitizedSupervisor = this.sanitizeFilename(supervisorId);
-    const sanitizedName = this.sanitizeFilename(originalFilename);
-    const sanitizedCategory = this.sanitizeFilename(category || 'General');
-    const timestamp = Date.now();
-    const vaultFileName = `${timestamp}_${sanitizedSupervisor}_${sanitizedName}`;
-
-    // Target folder by category
-    const categoryDir = path.join(LOCAL_VAULT_DIR, sanitizedCategory);
-    if (!fs.existsSync(categoryDir)) {
-      fs.mkdirSync(categoryDir, { recursive: true });
-    }
-
-    const destinationPath = path.join(categoryDir, vaultFileName);
-
-    // Copy from temp upload directory to permanent Data Vault storage
-    fs.copyFileSync(tempFilePath, destinationPath);
-
-    // Remove temp file after successful archival into vault
-    if (fs.existsSync(tempFilePath)) {
-      try {
-        fs.unlinkSync(tempFilePath);
-      } catch (err) {
-        console.warn('[Storage] Warning removing temp file:', err.message);
-      }
-    }
-
-    const storageReference = `gs://${this.bucketName}/raw-files/${sanitizedCategory}/${vaultFileName}`;
-    const rawFileUrl = `/api/vault/${encodeURIComponent(sanitizedCategory)}/${vaultFileName}`;
-
-    console.log(`[Storage] Document archived in Data Vault under category "${sanitizedCategory}": "${vaultFileName}" (${fileStats.size} bytes)`);
-
-    return {
-      vaultPath: destinationPath,
-      vaultFileName,
-      category: sanitizedCategory,
-      storageReference,
-      rawFileUrl,
-      fileSize: fileStats.size,
-      mimeType: path.extname(originalFilename).toLowerCase(),
-    };
+  ensureDirs() {
+    fs.mkdirSync(this.vaultDir, { recursive: true });
+    fs.mkdirSync(config.tempUploadDir, { recursive: true });
   }
 
-  /**
-   * Automatically creates a permanent .txt file for pasted raw text and saves it into the Data Vault by category.
-   *
-   * @param {string} textContent - Raw text content string.
-   * @param {string} docTitle - Document title / topic name.
-   * @param {string} supervisorId - Email/ID of uploading supervisor.
-   * @param {string} category - Document category.
-   * @returns {Promise<{ vaultPath: string, storageReference: string, rawFileUrl: string, fileSize: number, category: string }>}
-   */
-  async saveRawTextToVault(textContent, docTitle, supervisorId = 'supervisor_default', category = 'General') {
-    const sanitizedSupervisor = this.sanitizeFilename(supervisorId);
-    const sanitizedTitle = this.sanitizeFilename(docTitle || 'pasted_note');
-    const sanitizedCategory = this.sanitizeFilename(category || 'General');
-    const timestamp = Date.now();
-    const vaultFileName = `${timestamp}_${sanitizedSupervisor}_${sanitizedTitle}.txt`;
-
-    // Target folder by category
-    const categoryDir = path.join(LOCAL_VAULT_DIR, sanitizedCategory);
-    if (!fs.existsSync(categoryDir)) {
-      fs.mkdirSync(categoryDir, { recursive: true });
-    }
-
-    const destinationPath = path.join(categoryDir, vaultFileName);
-
-    // Write the raw text into a permanent file in Data Vault
-    fs.writeFileSync(destinationPath, textContent, 'utf-8');
-    const fileStats = fs.statSync(destinationPath);
-
-    const storageReference = `gs://${this.bucketName}/raw-files/${sanitizedCategory}/${vaultFileName}`;
-    const rawFileUrl = `/api/vault/${encodeURIComponent(sanitizedCategory)}/${vaultFileName}`;
-
-    console.log(`[Storage] Raw text saved in Data Vault under category "${sanitizedCategory}": "${vaultFileName}" (${fileStats.size} bytes)`);
-
-    return {
-      vaultPath: destinationPath,
-      vaultFileName,
-      category: sanitizedCategory,
-      storageReference,
-      rawFileUrl,
-      fileSize: fileStats.size,
-      mimeType: '.txt',
-    };
+  /** Resolves a vault-relative path to an absolute path, rejecting traversal. */
+  resolve(relPath) {
+    if (!relPath) return null;
+    const abs = path.resolve(this.vaultDir, relPath);
+    const root = path.resolve(this.vaultDir) + path.sep;
+    if (!abs.startsWith(root)) return null;
+    return abs;
   }
 
-  /**
-   * Retrieves a file path from the Data Vault by filename and optional category.
-   *
-   * @param {string} filename
-   * @param {string} [category]
-   * @returns {string|null}
-   */
-  getVaultFilePath(filename, category = null) {
-    const safeName = path.basename(filename);
+  exists(relPath) {
+    const abs = this.resolve(relPath);
+    return Boolean(abs && fs.existsSync(abs));
+  }
 
-    if (category) {
-      const safeCategory = this.sanitizeFilename(category);
-      const catPath = path.join(LOCAL_VAULT_DIR, safeCategory, safeName);
-      if (fs.existsSync(catPath)) return catPath;
+  sha256File(filePath) {
+    const hash = crypto.createHash('sha256');
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(1024 * 1024);
+    try {
+      let n;
+      while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) hash.update(buf.subarray(0, n));
+    } finally {
+      fs.closeSync(fd);
     }
+    return hash.digest('hex');
+  }
 
-    // Direct root vault check
-    const rootPath = path.join(LOCAL_VAULT_DIR, safeName);
-    if (fs.existsSync(rootPath)) return rootPath;
+  relPathFor(documentId, originalName, at = new Date()) {
+    const ym = at.toISOString().slice(0, 7);
+    return path.posix.join('docs', ym, `${documentId}_${this.sanitizeFilename(originalName)}`);
+  }
 
-    // Search subdirectories inside vault
-    if (fs.existsSync(LOCAL_VAULT_DIR)) {
-      const entries = fs.readdirSync(LOCAL_VAULT_DIR, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const subPath = path.join(LOCAL_VAULT_DIR, entry.name, safeName);
-          if (fs.existsSync(subPath)) return subPath;
+  /** Moves an uploaded temp file into the vault. */
+  async saveFile(tempPath, documentId, originalName) {
+    this.ensureDirs();
+    if (!fs.existsSync(tempPath)) throw new Error('Uploaded temp file is missing.');
+    const rel = this.relPathFor(documentId, originalName);
+    const abs = this.resolve(rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    const sha256 = this.sha256File(tempPath);
+    try {
+      fs.renameSync(tempPath, abs);
+    } catch (_) {
+      fs.copyFileSync(tempPath, abs);
+      fs.unlinkSync(tempPath);
+    }
+    const size = fs.statSync(abs).size;
+    const storageReference = await this.mirrorToCloud(rel, abs);
+    return { relPath: rel, absPath: abs, size, sha256, storageReference };
+  }
+
+  async saveText(text, documentId, name) {
+    this.ensureDirs();
+    const fileName = /\.txt$/i.test(name) ? name : `${name}.txt`;
+    const rel = this.relPathFor(documentId, fileName);
+    const abs = this.resolve(rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, text, 'utf-8');
+    const size = fs.statSync(abs).size;
+    const sha256 = crypto.createHash('sha256').update(text).digest('hex');
+    const storageReference = await this.mirrorToCloud(rel, abs);
+    return { relPath: rel, absPath: abs, size, sha256, storageReference };
+  }
+
+  removeTemp(tempPath) {
+    try {
+      if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (_) {
+      /* best effort */
+    }
+  }
+
+  deleteFile(relPath) {
+    const abs = this.resolve(relPath);
+    if (abs && fs.existsSync(abs)) {
+      fs.unlinkSync(abs);
+      return true;
+    }
+    return false;
+  }
+
+  /** Lists every file in the vault (relative posix paths) - used by reconciliation. */
+  listAllFiles() {
+    const out = [];
+    const root = path.resolve(this.vaultDir);
+    if (!fs.existsSync(root)) return out;
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name !== '.gitkeep' && !entry.name.startsWith('.')) {
+          const st = fs.statSync(full);
+          out.push({ relPath: path.relative(root, full).split(path.sep).join('/'), size: st.size, mtime: st.mtime.toISOString() });
         }
       }
-    }
+    };
+    walk(root);
+    return out;
+  }
 
+  /** Legacy lookup used by old /api/vault/<category>/<file> links. */
+  findLegacyFile(filename, category) {
+    const safe = path.basename(filename || '');
+    if (!safe) return null;
+    const candidates = [];
+    if (category) candidates.push(path.join(this.sanitizeFilename(category), safe));
+    candidates.push(safe);
+    for (const c of candidates) if (this.exists(c)) return c.split(path.sep).join('/');
+    for (const f of this.listAllFiles()) if (path.posix.basename(f.relPath) === safe) return f.relPath;
     return null;
+  }
+
+  cloudConfigured() {
+    return Boolean(process.env.GCS_BUCKET_NAME);
+  }
+
+  cloudClient() {
+    if (this._gcs !== undefined) return this._gcs;
+    try {
+      const { Storage } = require('@google-cloud/storage');
+      this._gcs = new Storage();
+    } catch (_) {
+      this._gcs = null;
+    }
+    return this._gcs;
+  }
+
+  async mirrorToCloud(relPath, absPath) {
+    const local = `local://vault/${relPath}`;
+    if (!this.cloudConfigured()) return local;
+    const client = this.cloudClient();
+    if (!client) return local; // package not installed: do not claim cloud storage
+    try {
+      await client.bucket(process.env.GCS_BUCKET_NAME).upload(absPath, { destination: `vault/${relPath}` });
+      return `gs://${process.env.GCS_BUCKET_NAME}/vault/${relPath}`;
+    } catch (err) {
+      console.error('[Storage] GCS mirror failed (file remains safely in the local vault):', err.message);
+      return local;
+    }
+  }
+
+  health() {
+    let writable = false;
+    try {
+      this.ensureDirs();
+      const probe = path.join(this.vaultDir, `.write_probe_${process.pid}`);
+      fs.writeFileSync(probe, 'ok');
+      fs.unlinkSync(probe);
+      writable = true;
+    } catch (_) {
+      writable = false;
+    }
+    let cloudMirror = 'not_configured';
+    if (this.cloudConfigured()) cloudMirror = this.cloudClient() ? 'active' : 'unavailable_package_not_installed';
+    return { writable, vaultDir: this.vaultDir, cloudMirror, persistentVolumeHint: config.isProduction ? 'Ensure DATA_DIR is on a persistent volume' : null };
   }
 }
 

@@ -2,7 +2,7 @@
 # Production Dockerfile for Private Gemini RAG Backend & Data Vault
 # ==============================================================================
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Install security updates and dumb-init for proper process signal handling
 RUN apk add --no-cache dumb-init
@@ -16,6 +16,7 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy application source code and web assets
 COPY src/ ./src/
 COPY public/ ./public/
+COPY scripts/ ./scripts/
 
 # Create persistent storage directories with appropriate permissions
 RUN mkdir -p /app/data/vault /app/uploads && \

@@ -10,6 +10,8 @@ const connectionStatus = document.getElementById('connectionStatus');
 const langToggleBtn = document.getElementById('langToggleBtn');
 const currentLangLabel = document.getElementById('currentLangLabel');
 
+const tr = (key, vars) => (window.i18n ? window.i18n.t(key, vars) : key);
+
 function updateLangUi(lang) {
   if (currentLangLabel) {
     currentLangLabel.textContent = (lang || 'en').toUpperCase();
@@ -18,10 +20,7 @@ function updateLangUi(lang) {
 
 function initWelcomeMessage() {
   messagesContainer.innerHTML = '';
-  const isAr = window.i18n && window.i18n.currentLang === 'ar';
-  const welcomeText = isAr
-    ? window.i18n.t('chat.welcome', 'Welcome to Private Assistant')
-    : `Hello! I am your **Private Knowledge Assistant**.\n\nAsk me any question about the books and notes in your private repository. My answers are strictly retrieved from your verified materials without hallucinations.`;
+  const welcomeText = tr('chat.greeting');
 
   renderMessage({
     sender: 'assistant',
@@ -54,7 +53,7 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
   row.className = `message-row ${sender}`;
   if (msgId) row.id = msgId;
 
-  const senderName = sender === 'user' ? 'You' : 'Private Assistant';
+  const senderName = sender === 'user' ? tr('chat.you') : tr('chat.assistant');
   const icon = sender === 'user' ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-wand-magic-sparkles"></i>';
 
   let sourcesHtml = '';
@@ -63,7 +62,7 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
       <div class="sources-section">
         <div class="sources-header">
           <i class="fa-solid fa-bookmark"></i>
-          <span>Cited Sources (${sources.length}):</span>
+          <span>${escapeHtml(tr('chat.cited_sources', { n: sources.length }))}</span>
         </div>
         ${sources.map((src, i) => `
           <div class="citation-card" onclick="this.classList.toggle('open')">
@@ -73,7 +72,7 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
                 <span>#${i + 1}: ${escapeHtml(src.bookTitle)}</span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="citation-badge">${(src.similarity * 100).toFixed(1)}% Match</span>
+                <span class="citation-badge">${escapeHtml(tr('chat.match', { pct: (src.similarity * 100).toFixed(1) }))}</span>
                 <i class="fa-solid fa-chevron-down citation-chevron"></i>
               </div>
             </div>
@@ -91,7 +90,7 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
     bodyContent = `
       <div class="typing-indicator">
         <div class="spinner-mini"></div>
-        <span>Searching knowledge base and formulating answer...</span>
+        <span>${escapeHtml(tr('chat.thinking'))}</span>
       </div>
     `;
   } else {
@@ -158,11 +157,14 @@ async function handleChatSubmit(e) {
       body: JSON.stringify({ question: query })
     });
 
-    const data = await res.json();
+    // Never call res.json() blindly: an empty or HTML body (proxy error) must become a clear message.
+    const raw = await res.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch (_) { data = null; }
     const loadingElem = document.getElementById(loadingId);
     if (loadingElem) loadingElem.remove();
 
-    if (res.ok && data.success) {
+    if (res.ok && data && data.success) {
       renderMessage({
         sender: 'assistant',
         text: data.answer,
@@ -170,9 +172,13 @@ async function handleChatSubmit(e) {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     } else {
+      const key = data && data.code ? `errors.${data.code}` : null;
+      const known = key && tr(key) !== key ? tr(key) : null;
+      const reason = known || (data && data.error) || tr(res.status >= 500 ? 'chat.server_busy' : 'chat.error_server');
+      const ref = data && data.requestId ? ` (ID: ${data.requestId})` : '';
       renderMessage({
         sender: 'assistant',
-        text: `⚠️ **Error:** ${data.error || 'Failed to retrieve answer from knowledge base.'}`,
+        text: `⚠️ **${tr('chat.error_label')}:** ${reason}${ref}`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     }
@@ -181,7 +187,7 @@ async function handleChatSubmit(e) {
     if (loadingElem) loadingElem.remove();
     renderMessage({
       sender: 'assistant',
-      text: `⚠️ **Network Error:** Could not connect to the search index server.`,
+      text: `⚠️ **${tr('chat.error_label')}:** ${tr('chat.network_error')}`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
   } finally {
@@ -228,7 +234,7 @@ document.querySelectorAll('.suggestion-chip').forEach(chip => {
 
 if (clearChatBtn) {
   clearChatBtn.addEventListener('click', () => {
-    if (confirm('Clear current conversation history?')) {
+    if (confirm(tr('chat.clear_confirm'))) {
       initWelcomeMessage();
     }
   });
