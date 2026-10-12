@@ -87,51 +87,80 @@ class IngestionProvider with ChangeNotifier {
     }
   }
 
-  /// Selects and indexes a document file (.pdf, .txt, .md)
+  /// Selects and indexes document or image files (.pdf, .txt, .md, .jpg, .png, .webp) with bulk support
   Future<bool> pickAndUploadBook({String? customTitle, int? chunkSize, int? chunkOverlap}) async {
     try {
       _status = IngestionStatus.picking;
-      _statusMessage = 'Selecting document (.PDF, .TXT, .MD)...';
+      _statusMessage = 'Selecting documents or images...';
       _errorMessage = null;
       notifyListeners();
 
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'txt', 'md'],
+        allowedExtensions: ['pdf', 'txt', 'md', 'jpg', 'jpeg', 'png', 'webp'],
+        allowMultiple: true,
       );
 
-      if (result == null || result.files.single.path == null) {
+      if (result == null || result.files.isEmpty) {
         _status = IngestionStatus.idle;
         _statusMessage = null;
         notifyListeners();
         return false;
       }
 
-      final filePath = result.files.single.path!;
-      final originalName = result.files.single.name;
-      final title = (customTitle != null && customTitle.trim().isNotEmpty)
-          ? customTitle.trim()
-          : originalName.replaceAll(RegExp(r'\.(pdf|txt|md)$', caseSensitive: false), '');
+      final validFiles = result.files.where((f) => f.path != null).toList();
+      if (validFiles.isEmpty) {
+        _status = IngestionStatus.idle;
+        _statusMessage = null;
+        notifyListeners();
+        return false;
+      }
 
       _status = IngestionStatus.uploading;
-      _statusMessage = 'Archiving "$title" in Data Vault & generating Gemini vectors...';
-      notifyListeners();
+      int successCount = 0;
+      int failCount = 0;
 
-      await _apiService.uploadBook(
-        filePath: filePath,
-        customTitle: title,
-        supervisorId: _activeSupervisorId,
-        category: _selectedCategory,
-        language: _selectedLanguage,
-        chunkSize: chunkSize,
-        chunkOverlap: chunkOverlap,
-      );
+      for (int i = 0; i < validFiles.length; i++) {
+        final f = validFiles[i];
+        final filePath = f.path!;
+        final originalName = f.name;
+        final title = (validFiles.length == 1 && customTitle != null && customTitle.trim().isNotEmpty)
+            ? customTitle.trim()
+            : originalName.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$', caseSensitive: false), '');
 
-      _status = IngestionStatus.completed;
-      _statusMessage = 'Successfully archived and indexed "$title"!';
+        _statusMessage = 'Processing ${i + 1}/${validFiles.length}: "$title"...';
+        notifyListeners();
+
+        try {
+          await _apiService.uploadBook(
+            filePath: filePath,
+            customTitle: title,
+            supervisorId: _activeSupervisorId,
+            category: _selectedCategory,
+            language: _selectedLanguage,
+            chunkSize: chunkSize,
+            chunkOverlap: chunkOverlap,
+          );
+          successCount++;
+        } catch (fileErr) {
+          debugPrint('[IngestionProvider] File upload error on $originalName: $fileErr');
+          failCount++;
+        }
+      }
+
       await fetchBooks();
-      notifyListeners();
-      return true;
+
+      if (failCount == 0) {
+        _status = IngestionStatus.completed;
+        _statusMessage = 'Successfully uploaded and indexed $successCount files!';
+        notifyListeners();
+        return true;
+      } else {
+        _status = IngestionStatus.completed;
+        _statusMessage = 'Batch finished: $successCount succeeded, $failCount failed.';
+        notifyListeners();
+        return successCount > 0;
+      }
     } catch (e) {
       _status = IngestionStatus.error;
       _errorMessage = e.toString().replaceAll('Exception: ', '');

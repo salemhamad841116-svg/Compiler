@@ -731,3 +731,250 @@ body.rtl-mode .glass-table td {
   color: var(--text-muted);
 }
 
+/* Batch Queue Component Styles */
+.batch-queue-container {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md, 12px);
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.batch-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.batch-queue-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main, #f8fafc);
+}
+
+.batch-queue-title .badge {
+  background: var(--primary, #4f46e5);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+}
+
+.btn-clear {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-clear:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.btn-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.batch-progress-wrapper {
+  margin: 14px 0;
+}
+
+.batch-progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.batch-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+  transition: width 0.3s ease;
+}
+
+.batch-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.stat-pill {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--glass-border);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.stat-pill.stat-success {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.stat-pill.stat-failed {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.stat-pill.stat-remaining {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.batch-files-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  padding-right: 4px;
+}
+
+.batch-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  font-size: 13px;
+  transition: background 0.2s ease;
+}
+
+.batch-file-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.batch-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.batch-file-info .file-icon {
+  font-size: 16px;
+  color: var(--accent-cyan, #06b6d4);
+}
+
+.batch-file-name {
+  max-width: 320px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-main, #f8fafc);
+}
+
+.batch-file-size {
+  font-size: 11px;
+  color: var(--text-dim, #64748b);
+}
+
+.batch-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.batch-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: capitalize;
+}
+
+.badge-pending {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.badge-uploading {
+  background: rgba(79, 70, 229, 0.2);
+  color: #818cf8;
+}
+
+.badge-ocr {
+  background: rgba(6, 182, 212, 0.2);
+  color: #22d3ee;
+}
+
+.badge-indexing {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.badge-failed {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.btn-remove-item {
+  background: transparent;
+  border: none;
+  color: var(--text-dim, #64748b);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.btn-remove-item:hover {
+  color: #ef4444;
+}
+
+.batch-control-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.retry-btn {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+  transition: all 0.2s ease;
+}
+
+.retry-btn:hover {
+  filter: brightness(1.1);
+}
+

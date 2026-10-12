@@ -29,14 +29,16 @@ const storage = multer.diskStorage({
   },
 });
 
-// Document file filter (.pdf, .txt, .md)
+// Document and Image file filter (.pdf, .txt, .md, .jpg, .jpeg, .png, .webp)
 const documentFileFilter = (req, file, cb) => {
-  const allowedExts = ['.pdf', '.txt', '.md'];
+  const allowedExts = ['.pdf', '.txt', '.md', '.jpg', '.jpeg', '.png', '.webp'];
   const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedExts.includes(ext)) {
+  const isImageMime = file.mimetype && file.mimetype.startsWith('image/');
+  const isDocMime = file.mimetype && (file.mimetype === 'application/pdf' || file.mimetype.startsWith('text/'));
+  if (allowedExts.includes(ext) || isImageMime || isDocMime) {
     cb(null, true);
   } else {
-    cb(new Error(`Invalid document type: ${ext}. Supported formats: .pdf, .txt, .md`), false);
+    cb(new Error(`Invalid file type: ${ext}. Supported formats: PDF, TXT, MD, JPG, PNG, WEBP`), false);
   }
 };
 
@@ -63,14 +65,44 @@ const mediaUpload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
 });
 
-// 1. Document Upload (.pdf, .txt, .md)
-router.post('/upload-book', documentUpload.single('bookFile'), processBookUpload);
+const handleDocumentUpload = (req, res, next) => {
+  documentUpload.single('bookFile')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ success: false, error: 'File size exceeds maximum limit (50MB).' });
+        }
+        return res.status(400).json({ success: false, error: `Upload error: ${err.message}` });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'File upload error.' });
+    }
+    next();
+  });
+};
+
+const handleMediaUpload = (req, res, next) => {
+  mediaUpload.single('mediaFile')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ success: false, error: 'Media size exceeds maximum limit (100MB).' });
+        }
+        return res.status(400).json({ success: false, error: `Upload error: ${err.message}` });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'Media upload error.' });
+    }
+    next();
+  });
+};
+
+// 1. Document & Image Upload (.pdf, .txt, .md, .jpg, .png, .webp)
+router.post('/upload-book', handleDocumentUpload, processBookUpload);
 
 // 2. Raw Text Ingestion
 router.post('/raw-text', processRawTextInput);
 
 // 3. Video & Audio Speech-to-Text Ingestion (.mp4, .mp3, .wav, etc.)
-router.post('/media', mediaUpload.single('mediaFile'), processMediaUpload);
+router.post('/media', handleMediaUpload, processMediaUpload);
 
 // 4. Web URL Scraper Ingestion
 router.post('/scrape-url', processUrlScraping);

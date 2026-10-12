@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parsePDFDocument } = require('../utils/pdfParser');
+const { extractTextFromImage } = require('../utils/imageOcr');
 const { chunkDocumentText, calculateEstimatedPages } = require('../utils/textChunker');
 const { generateVectorEmbedding } = require('../services/embeddingService');
 const { transcribeMediaFile } = require('../utils/mediaTranscriber');
@@ -9,7 +10,7 @@ const storageService = require('../services/storageService');
 const { insertIntoVectorDatabase, getStoredBooksSummary } = require('../models/vectorDbModel');
 
 /**
- * Handles uploading, permanent Data Vault archiving, and indexing of files (.pdf, .txt, .md).
+ * Handles uploading, permanent Data Vault archiving, and indexing of files (.pdf, .txt, .md, .jpg, .png, .webp).
  */
 async function processBookUpload(req, res) {
   let uploadedFilePath = null;
@@ -18,12 +19,14 @@ async function processBookUpload(req, res) {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        error: 'No file uploaded. Please upload a valid document (.pdf, .txt, .md) using the "bookFile" field.',
+        error: 'No file uploaded. Please upload a valid document or image (.pdf, .txt, .md, .jpg, .png, .webp) using the "bookFile" field.',
       });
     }
 
     uploadedFilePath = req.file.path;
     const fileExt = path.extname(req.file.originalname).toLowerCase();
+    const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(fileExt);
+    const uploadType = isImage ? 'image' : 'book';
     const bookTitle = req.body.title || req.file.originalname.replace(/\.[^/.]+$/, '');
     const uploadedBy = req.body.uploadedBy || req.headers['x-supervisor-id'] || 'supervisor_default@masruq.com';
     const category = (req.body.category || 'General').trim();
@@ -31,12 +34,16 @@ async function processBookUpload(req, res) {
     const chunkSize = parseInt(req.body.chunkSize, 10) || parseInt(process.env.MAX_CHUNK_SIZE, 10) || 800;
     const chunkOverlap = parseInt(req.body.chunkOverlap, 10) || parseInt(process.env.CHUNK_OVERLAP, 10) || 150;
 
-    console.log(`[Ingestion] Starting Data Vault processing for: "${bookTitle}" [${category} / ${language}] (${fileExt}) by: "${uploadedBy}"`);
+    console.log(`[Ingestion] Starting Data Vault processing for: "${bookTitle}" [${category} / ${language}] (${fileExt}, type=${uploadType}) by: "${uploadedBy}"`);
 
     let rawDocumentText = '';
     let totalPages = 1;
 
-    if (fileExt === '.pdf') {
+    if (isImage) {
+      console.log(`[Ingestion] Performing Gemini Multimodal OCR on image: ${req.file.originalname}`);
+      rawDocumentText = await extractTextFromImage(uploadedFilePath);
+      totalPages = 1;
+    } else if (fileExt === '.pdf') {
       const pdfResult = await parsePDFDocument(uploadedFilePath);
       rawDocumentText = pdfResult.text;
       totalPages = pdfResult.numPages;
@@ -46,7 +53,7 @@ async function processBookUpload(req, res) {
     } else {
       return res.status(400).json({
         success: false,
-        error: `Unsupported file type: ${fileExt}. Only .pdf, .txt, and .md files are supported in this endpoint.`,
+        error: `Unsupported file type: ${fileExt}. Supported formats: .pdf, .txt, .md, .jpg, .jpeg, .png, .webp.`,
       });
     }
 
@@ -77,7 +84,7 @@ async function processBookUpload(req, res) {
         category,
         language,
         uploadedBy,
-        uploadType: 'book',
+        uploadType,
         totalPages,
         rawFileUrl: vaultResult.rawFileUrl,
         storageReference: vaultResult.storageReference,
@@ -93,17 +100,19 @@ async function processBookUpload(req, res) {
       storedCount++;
     }
 
-    console.log(`[Ingestion] Successfully indexed "${bookTitle}" in Data Vault under "${category}" (${storedCount} chunks, ${totalPages} pages).`);
+    console.log(`[Ingestion] Successfully indexed "${bookTitle}" in Data Vault under "${category}" (${storedCount} chunks, ${totalPages} pages, type=${uploadType}).`);
 
     return res.status(200).json({
       success: true,
-      message: 'Document permanently archived in Data Vault and indexed successfully.',
+      message: isImage
+        ? 'Image processed with OCR, archived in Data Vault, and indexed successfully.'
+        : 'Document permanently archived in Data Vault and indexed successfully.',
       data: {
         bookTitle,
         category,
         language,
         uploadedBy,
-        uploadType: 'book',
+        uploadType,
         totalPages,
         createdAt: uploadTimestamp,
         rawFileUrl: vaultResult.rawFileUrl,

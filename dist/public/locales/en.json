@@ -26,21 +26,21 @@
       "custom": "Custom ID / Email..."
     },
     "tabs": {
-      "document": "Document File (.PDF, .TXT, .MD)",
+      "document": "Document or Image (.PDF, .TXT, .MD, .JPG, .PNG, .WEBP)",
       "raw_text": "Paste Raw Text",
       "media": "Video / Audio (Speech-to-Text)",
       "url": "Web URL Scraper"
     },
     "upload": {
-      "title": "Upload Document (.PDF, .TXT, .MD)",
+      "title": "Upload Documents or Images (Single or Bulk up to 500 Files)",
       "vault_badge": "Data Vault Archival",
-      "desc": "Upload books, research papers, or articles. Files are permanently archived in the Data Vault and embedded via text-embedding-004.",
-      "doc_title_label": "Document Title (Optional):",
+      "desc": "Upload books, research papers, articles, or images. Text is extracted automatically via OCR, files are archived permanently in the Data Vault, and indexed via text-embedding-004.",
+      "doc_title_label": "Document Title (Optional for single file):",
       "doc_title_placeholder": "e.g., Islamic Jurisprudence & Ethical Leadership",
       "category_label": "Category:",
       "language_label": "Language:",
-      "drag_drop": "Drag and drop your file here, or click to browse",
-      "supported": "Supported: .pdf, .txt, .md (Max 100MB)",
+      "drag_drop": "Drag and drop your files here, or click to browse multiple files",
+      "supported": "Supported: PDF, TXT, MD, JPG, PNG, WEBP (Max 50MB per file - Supports 1 to 500 files bulk)",
       "btn_submit": "Upload & Index Document"
     },
     "raw": {
@@ -133,8 +133,8 @@
     },
     "docs": {
       "title": "Master Document Ingestion & Management Hub",
-      "desc": "Complete administrative control: Upload PDFs and books, paste text, transcribe speech, scrape web URLs, edit metadata, and permanently delete documents and vectors.",
-      "tab_upload": "Upload Document (.PDF, .TXT, .MD)",
+      "desc": "Complete administrative control: Upload PDFs, images, and books (up to 500 files bulk), extract OCR text, paste text, transcribe speech, scrape web URLs, edit metadata, and permanently delete documents and vectors.",
+      "tab_upload": "Upload Documents & Images (.PDF, .TXT, .MD, .JPG, .PNG, .WEBP)",
       "tab_raw": "Paste Raw Text",
       "tab_media": "Video / Audio (Speech-to-Text)",
       "tab_url": "Web URL Scraper",
@@ -229,5 +229,28 @@
       "system_status": "System Status",
       "operational": "Fully Operational"
     }
+  },
+  "batch": {
+    "queue_title": "Selected Files Queue (Bulk Upload)",
+    "queue_count": "files selected",
+    "total_size": "Total Size",
+    "upload_all": "Upload All Files",
+    "clear_all": "Clear Queue",
+    "retry_failed": "Retry Failed Files",
+    "status_pending": "Pending",
+    "status_uploading": "Uploading...",
+    "status_ocr": "Extracting OCR...",
+    "status_indexing": "Indexing...",
+    "status_success": "Completed Successfully",
+    "status_failed": "Upload Failed",
+    "badge_succeeded": "Succeeded",
+    "badge_failed": "Failed",
+    "badge_remaining": "Remaining",
+    "badge_total": "Total",
+    "complete_success": "All {{count}} files uploaded and processed successfully!",
+    "complete_partial": "Upload completed: {{succeeded}} succeeded, {{failed}} failed. You can retry failed files.",
+    "no_files_selected": "Please select one or more files first.",
+    "file_too_large": "File exceeds 50MB size limit",
+    "invalid_file_type": "Unsupported file format (Allowed: PDF, TXT, MD, JPG, PNG, WEBP)"
   }
 }

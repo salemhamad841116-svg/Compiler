@@ -231,8 +231,51 @@ if (adminTabRawTextBtn) adminTabRawTextBtn.addEventListener('click', () => switc
 if (adminTabMediaBtn) adminTabMediaBtn.addEventListener('click', () => switchAdminIngestTab(adminTabMediaBtn, adminMediaPane));
 if (adminTabUrlScraperBtn) adminTabUrlScraperBtn.addEventListener('click', () => switchAdminIngestTab(adminTabUrlScraperBtn, adminUrlScraperPane));
 
-// Dropzone 1: Document Upload
-if (adminDocDropzone && adminDocFileInput) {
+// Helper for safely reading JSON responses without throwing Unexpected end of JSON input
+async function safeParseResponse(res) {
+  try {
+    const text = await res.text();
+    if (!text || text.trim().length === 0) return null;
+    return JSON.parse(text);
+  } catch (err) {
+    return null;
+  }
+}
+
+// Dropzone 1: Document Upload & Admin Batch Queue Setup
+let adminBatchManager = null;
+if (window.BatchQueueManager && adminDocDropzone && adminDocFileInput) {
+  adminBatchManager = new window.BatchQueueManager({
+    fileInput: adminDocFileInput,
+    dropzone: adminDocDropzone,
+    dropzoneText: adminDocDropzoneText,
+    container: document.getElementById('adminBatchQueueContainer'),
+    filesList: document.getElementById('adminBatchFilesList'),
+    progressBarFill: document.getElementById('adminBatchProgressBarFill'),
+    progressWrapper: document.getElementById('adminBatchProgressWrapper'),
+    statTotal: document.getElementById('adminBatchStatTotal'),
+    statSuccess: document.getElementById('adminBatchStatSuccess'),
+    statFailed: document.getElementById('adminBatchStatFailed'),
+    statRemaining: document.getElementById('adminBatchStatRemaining'),
+    totalBadge: document.getElementById('adminBatchTotalBadge'),
+    uploadAllBtn: document.getElementById('adminBatchUploadAllBtn'),
+    retryFailedBtn: document.getElementById('adminBatchRetryFailedBtn'),
+    clearBtn: document.getElementById('adminBatchClearBtn'),
+    singleSubmitBtn: adminStartDocUploadBtn,
+    getMetadata: () => ({
+      uploadedBy: getActiveAdminSupervisor(),
+      category: adminDocCategorySelect ? adminDocCategorySelect.value : 'General',
+      language: adminDocLanguageSelect ? adminDocLanguageSelect.value : 'Arabic',
+    }),
+    onComplete: () => {
+      fetchAdminDocuments();
+      fetchOverviewStats();
+      fetchAuditLogs();
+      fetchSupervisors();
+    },
+    concurrency: 3,
+  });
+} else if (adminDocDropzone && adminDocFileInput) {
   adminDocDropzone.addEventListener('click', () => adminDocFileInput.click());
   adminDocFileInput.addEventListener('change', () => {
     if (adminDocFileInput.files.length > 0) {
@@ -678,12 +721,18 @@ if (confirmDeleteDocBtn) {
   });
 }
 
-// Ingestion Tab 1 Submit: Document File (.pdf, .txt, .md)
+// Ingestion Tab 1 Submit: Document & Image File (.pdf, .txt, .md, .jpg, .png, .webp)
 if (adminUploadDocForm) {
   adminUploadDocForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (adminBatchManager && adminBatchManager.queue.length > 0) {
+      await adminBatchManager.startBatchUpload();
+      return;
+    }
+
     if (!adminDocFileInput.files || adminDocFileInput.files.length === 0) {
-      alert('Please select a document file (.PDF, .TXT, .MD) to upload.');
+      alert('Please select one or more documents or images to upload.');
       return;
     }
 
@@ -712,20 +761,22 @@ if (adminUploadDocForm) {
         body: formData,
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await safeParseResponse(res);
+      if (res.ok && data && data.success) {
         alert(`Success! "${data.data.bookTitle}" has been permanently archived in Data Vault and indexed (${data.data.totalChunks} chunks).`);
         adminUploadDocForm.reset();
-        adminDocDropzoneText.textContent = 'Click or Drag & Drop a document (.PDF, .TXT, .MD) here';
+        if (adminBatchManager) adminBatchManager.clearQueue();
+        adminDocDropzoneText.textContent = 'Click or Drag & Drop documents or images (.PDF, .TXT, .MD, .JPG, .PNG, .WEBP) here';
         fetchAdminDocuments();
         fetchOverviewStats();
         fetchAuditLogs();
         fetchSupervisors();
       } else {
-        alert(`Upload Failed: ${data.error || 'Server error'}`);
+        const errMsg = (data && data.error) ? data.error : `Server error (${res.status})`;
+        alert(`Upload Failed: ${errMsg}`);
       }
     } catch (err) {
-      alert(`Error uploading document: ${err.message}`);
+      alert(`Error uploading document: ${err.message || 'Network error'}`);
     } finally {
       adminUploadProgressBox.style.display = 'none';
       adminStartDocUploadBtn.disabled = false;

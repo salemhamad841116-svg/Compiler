@@ -116,6 +116,12 @@ class ApiService {
         mediaType = MediaType('text', 'plain');
       } else if (lowerPath.endsWith('.md')) {
         mediaType = MediaType('text', 'markdown');
+      } else if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+        mediaType = MediaType('image', 'jpeg');
+      } else if (lowerPath.endsWith('.png')) {
+        mediaType = MediaType('image', 'png');
+      } else if (lowerPath.endsWith('.webp')) {
+        mediaType = MediaType('image', 'webp');
       }
 
       final multipartFile = await http.MultipartFile.fromPath(
@@ -143,8 +149,16 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       } else {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData['error'] ?? 'Upload failed (${response.statusCode})');
+        String errMsg = 'Upload failed (${response.statusCode})';
+        try {
+          final errorData = jsonDecode(response.body);
+          if (errorData is Map && errorData.containsKey('error')) {
+            errMsg = errorData['error'].toString();
+          }
+        } catch (_) {
+          if (response.body.isNotEmpty) errMsg = response.body;
+        }
+        throw Exception(errMsg);
       }
     } catch (e) {
       throw Exception('Failed to upload and archive document: $e');

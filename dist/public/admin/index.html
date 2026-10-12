@@ -183,10 +183,51 @@
             </div>
 
             <div class="dropzone" id="adminDocDropzone" style="margin-top: 12px; margin-bottom: 16px;">
-              <input type="file" id="adminDocFileInput" accept=".pdf,.txt,.md,text/plain,text/markdown,application/pdf" style="display: none;">
+              <input type="file" id="adminDocFileInput" multiple accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,image/*,application/pdf,text/plain,text/markdown" style="display: none;">
               <i class="fa-solid fa-file-circle-plus dropzone-icon"></i>
-              <div class="dropzone-text" id="adminDocDropzoneText" data-i18n="supervisor.upload.drag_drop">Click or Drag & Drop a document (.PDF, .TXT, .MD) here</div>
-              <div class="dropzone-hint" data-i18n="supervisor.upload.supported">Max file size: 50MB</div>
+              <div class="dropzone-text" id="adminDocDropzoneText" data-i18n="supervisor.upload.drag_drop">Click or Drag & Drop documents or images (.PDF, .TXT, .MD, .JPG, .PNG, .WEBP) here</div>
+              <div class="dropzone-hint" data-i18n="supervisor.upload.supported">Max file size: 50MB (Supports 100-500 bulk files)</div>
+            </div>
+
+            <!-- Admin Batch Queue Container (100 to 500 files managed queue) -->
+            <div id="adminBatchQueueContainer" class="batch-queue-container" style="display: none; margin-bottom: 16px;">
+              <div class="batch-queue-header">
+                <div class="batch-queue-title">
+                  <i class="fa-solid fa-list-check"></i>
+                  <span data-i18n="batch.queue_title">Selected Files Queue</span>
+                  <span class="badge" id="adminBatchTotalBadge">0</span>
+                </div>
+                <div class="batch-queue-actions">
+                  <button type="button" class="btn-clear" id="adminBatchClearBtn">
+                    <i class="fa-solid fa-trash-can"></i> <span data-i18n="batch.clear_all">Clear Queue</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="batch-progress-wrapper" id="adminBatchProgressWrapper" style="display: none;">
+                <div class="batch-progress-bar-bg">
+                  <div class="batch-progress-bar-fill" id="adminBatchProgressBarFill" style="width: 0%;"></div>
+                </div>
+                <div class="batch-stats-row">
+                  <span class="stat-pill"><i class="fa-solid fa-layer-group"></i> <span data-i18n="batch.badge_total">Total</span>: <strong id="adminBatchStatTotal">0</strong></span>
+                  <span class="stat-pill stat-success"><i class="fa-solid fa-circle-check"></i> <span data-i18n="batch.badge_succeeded">Succeeded</span>: <strong id="adminBatchStatSuccess">0</strong></span>
+                  <span class="stat-pill stat-failed"><i class="fa-solid fa-circle-xmark"></i> <span data-i18n="batch.badge_failed">Failed</span>: <strong id="adminBatchStatFailed">0</strong></span>
+                  <span class="stat-pill stat-remaining"><i class="fa-solid fa-clock"></i> <span data-i18n="batch.badge_remaining">Remaining</span>: <strong id="adminBatchStatRemaining">0</strong></span>
+                </div>
+              </div>
+
+              <div class="batch-files-list" id="adminBatchFilesList"></div>
+
+              <div class="batch-control-buttons">
+                <button type="button" class="primary-btn" id="adminBatchUploadAllBtn">
+                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                  <span data-i18n="batch.upload_all">Upload All Files</span>
+                </button>
+                <button type="button" class="retry-btn" id="adminBatchRetryFailedBtn" style="display: none;">
+                  <i class="fa-solid fa-rotate-right"></i>
+                  <span data-i18n="batch.retry_failed">Retry Failed Files</span>
+                </button>
+              </div>
             </div>
 
             <button type="submit" class="primary-btn" id="adminStartDocUploadBtn">
@@ -794,6 +835,8 @@
 
   <script src="/js/i18n.js"></script>
   <script>if (!window.i18n) { document.write('<script src="js/i18n.js"><\/script>'); }</script>
+  <script src="/js/batchUploader.js"></script>
+  <script>if (!window.BatchQueueManager) { document.write('<script src="../js/batchUploader.js"><\/script>'); }</script>
   <script src="app.js"></script>
 </body>
 </html>

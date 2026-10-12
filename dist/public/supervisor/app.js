@@ -96,23 +96,55 @@ rawTextInput.addEventListener('input', function () {
   charCounter.textContent = `${this.value.length} characters`;
 });
 
-// 1. Document Dropzone Setup
-docDropzone.addEventListener('click', () => docFileInput.click());
-docFileInput.addEventListener('change', () => {
-  if (docFileInput.files.length > 0) {
-    docDropzoneText.textContent = `Selected: ${docFileInput.files[0].name}`;
+// Helper for safely reading JSON responses without throwing Unexpected end of JSON input
+async function safeParseResponse(res) {
+  try {
+    const text = await res.text();
+    if (!text || text.trim().length === 0) return null;
+    return JSON.parse(text);
+  } catch (err) {
+    return null;
   }
-});
-docDropzone.addEventListener('dragover', (e) => { e.preventDefault(); docDropzone.classList.add('dragover'); });
-docDropzone.addEventListener('dragleave', () => docDropzone.classList.remove('dragover'));
-docDropzone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  docDropzone.classList.remove('dragover');
-  if (e.dataTransfer.files.length > 0) {
-    docFileInput.files = e.dataTransfer.files;
-    docDropzoneText.textContent = `Selected: ${docFileInput.files[0].name}`;
-  }
-});
+}
+
+// 1. Document Dropzone & Batch Queue Setup (Supports 100-500 files bulk)
+let supervisorBatchManager = null;
+if (window.BatchQueueManager && docDropzone && docFileInput) {
+  supervisorBatchManager = new window.BatchQueueManager({
+    fileInput: docFileInput,
+    dropzone: docDropzone,
+    dropzoneText: docDropzoneText,
+    container: document.getElementById('batchQueueContainer'),
+    filesList: document.getElementById('batchFilesList'),
+    progressBarFill: document.getElementById('batchProgressBarFill'),
+    progressWrapper: document.getElementById('batchProgressWrapper'),
+    statTotal: document.getElementById('batchStatTotal'),
+    statSuccess: document.getElementById('batchStatSuccess'),
+    statFailed: document.getElementById('batchStatFailed'),
+    statRemaining: document.getElementById('batchStatRemaining'),
+    totalBadge: document.getElementById('batchTotalBadge'),
+    uploadAllBtn: document.getElementById('batchUploadAllBtn'),
+    retryFailedBtn: document.getElementById('batchRetryFailedBtn'),
+    clearBtn: document.getElementById('batchClearBtn'),
+    singleSubmitBtn: startDocUploadBtn,
+    getMetadata: () => ({
+      uploadedBy: getActiveSupervisorEmail(),
+      category: docCategorySelect ? docCategorySelect.value : 'General',
+      language: docLanguageSelect ? docLanguageSelect.value : 'Arabic',
+    }),
+    onComplete: () => {
+      loadSupervisorHistory();
+    },
+    concurrency: 3,
+  });
+} else if (docDropzone && docFileInput) {
+  docDropzone.addEventListener('click', () => docFileInput.click());
+  docFileInput.addEventListener('change', () => {
+    if (docFileInput.files.length > 0) {
+      docDropzoneText.textContent = `Selected: ${docFileInput.files[0].name}`;
+    }
+  });
+}
 
 // 2. Media Dropzone Setup
 mediaDropzone.addEventListener('click', () => mediaFileInput.click());
@@ -137,8 +169,8 @@ async function loadDynamicCategories() {
   try {
     const res = await fetch('/api/categories');
     if (!res.ok) return;
-    const json = await res.json();
-    const categories = json.data || [];
+    const json = await safeParseResponse(res);
+    const categories = (json && json.data) ? json.data : [];
     if (categories.length === 0) return;
 
     const selects = [docCategorySelect, rawCategorySelect, mediaCategorySelect, urlCategorySelect];
@@ -157,11 +189,18 @@ async function loadDynamicCategories() {
   }
 }
 
-// Tab 1 Submit: Document File (.pdf, .txt, .md)
+// Tab 1 Submit: Document & Image File (.pdf, .txt, .md, .jpg, .png, .webp)
 uploadDocForm.addEventListener('submit', async (e) => {
   e.preventDefault();
+
+  // If batch queue manager has files in queue, delegate to batch upload
+  if (supervisorBatchManager && supervisorBatchManager.queue.length > 0) {
+    await supervisorBatchManager.startBatchUpload();
+    return;
+  }
+
   if (!docFileInput.files || docFileInput.files.length === 0) {
-    alert('Please select a document (.PDF, .TXT, .MD) to upload.');
+    alert('Please select one or more documents or images to upload.');
     return;
   }
 
@@ -190,17 +229,19 @@ uploadDocForm.addEventListener('submit', async (e) => {
       body: formData,
     });
 
-    const data = await res.json();
-    if (res.ok && data.success) {
+    const data = await safeParseResponse(res);
+    if (res.ok && data && data.success) {
       alert(`Success! "${data.data.bookTitle}" has been permanently archived in Data Vault under category "${data.data.category}" and indexed (${data.data.totalChunks} chunks).`);
       uploadDocForm.reset();
-      docDropzoneText.textContent = 'Click or Drag & Drop a document (.PDF, .TXT, .MD) here';
+      if (supervisorBatchManager) supervisorBatchManager.clearQueue();
+      docDropzoneText.textContent = 'Click or Drag & Drop documents or images (.PDF, .TXT, .MD, .JPG, .PNG, .WEBP) here';
       loadSupervisorHistory();
     } else {
-      alert(`Upload Failed: ${data.error || 'Server error'}`);
+      const errMsg = (data && data.error) ? data.error : `Server returned error (${res.status})`;
+      alert(`Upload Failed: ${errMsg}`);
     }
   } catch (err) {
-    alert(`Error uploading document: ${err.message}`);
+    alert(`Error uploading document: ${err.message || 'Network error'}`);
   } finally {
     uploadProgressBox.style.display = 'none';
     startDocUploadBtn.disabled = false;
