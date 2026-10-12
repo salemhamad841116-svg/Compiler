@@ -1,116 +1,88 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
-const {
-  processBookUpload,
-  processRawTextInput,
-  processMediaUpload,
-  processUrlScraping,
-  downloadVaultFile,
-  listIndexedBooks,
-} = require('../controllers/ingestionController');
+const path = require('path');
+const config = require('../config');
+const { requireAuth, requireRole, asyncHandler } = require('../auth/middleware');
+const documents = require('../services/documentService');
+const c = require('../controllers/ingestionController');
 
 const router = express.Router();
 
-const uploadDir = path.join(__dirname, '../../uploads/temp_books/');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+function makeUpload(maxMb, filter) {
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(config.tempUploadDir, { recursive: true });
+      cb(null, config.tempUploadDir);
+    },
+    filename: (req, file, cb) => {
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+    },
+  });
+  return multer({
+    storage,
+    limits: { fileSize: maxMb * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      req.pendingFileName = file.originalname; // for audit of rejected uploads
+      filter(req, file, cb);
+    },
+  });
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${uniqueSuffix}-${sanitizedFilename}`);
-  },
-});
-
-// Document and Image file filter (.pdf, .txt, .md, .jpg, .jpeg, .png, .webp)
-const documentFileFilter = (req, file, cb) => {
-  const allowedExts = ['.pdf', '.txt', '.md', '.jpg', '.jpeg', '.png', '.webp'];
+const docUpload = makeUpload(config.maxFileMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  const isImageMime = file.mimetype && file.mimetype.startsWith('image/');
-  const isDocMime = file.mimetype && (file.mimetype === 'application/pdf' || file.mimetype.startsWith('text/'));
-  if (allowedExts.includes(ext) || isImageMime || isDocMime) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Invalid file type: ${ext}. Supported formats: PDF, TXT, MD, JPG, PNG, WEBP`), false);
-  }
-};
+  const kind = documents.classifyExt(ext);
+  if (kind === 'document' || kind === 'image') return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported file type "${ext}". Allowed: PDF, TXT, MD, JPG, PNG, WEBP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+});
 
-// Media file filter (.mp4, .mp3, .wav, .m4a, .ogg, .webm, .mov)
-const mediaFileFilter = (req, file, cb) => {
-  const allowedExts = ['.mp4', '.mp3', '.wav', '.m4a', '.ogg', '.webm', '.mov', '.avi'];
+const mediaUpload = makeUpload(config.maxMediaMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedExts.includes(ext) || file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Invalid media type: ${ext}. Supported video/audio formats: .mp4, .mp3, .wav, .m4a, .ogg, .webm, .mov`), false);
-  }
-};
-
-const documentUpload = multer({
-  storage,
-  fileFilter: documentFileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  if (documents.classifyExt(ext) === 'media') return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported media type "${ext}".`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
-const mediaUpload = multer({
-  storage,
-  fileFilter: mediaFileFilter,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
-});
-
-const handleDocumentUpload = (req, res, next) => {
-  documentUpload.single('bookFile')(req, res, (err) => {
-    if (err) {
+/** Wraps multer so failures are returned as clean JSON AND recorded as failed uploads in the audit log. */
+function handle(uploader, field, maxMb) {
+  return (req, res, next) => {
+    uploader.single(field)(req, res, (err) => {
+      if (!err) return next();
+      let status = err.status || 400;
+      let code = err.code && typeof err.code === 'string' && !err.code.startsWith('LIMIT_') ? err.code : 'UPLOAD_REJECTED';
+      let message = err.message || 'File upload error.';
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ success: false, error: 'File size exceeds maximum limit (50MB).' });
+          status = 413;
+          code = 'FILE_TOO_LARGE';
+          message = `File size exceeds the maximum of ${maxMb} MB.`;
+        } else {
+          code = 'UPLOAD_ERROR';
         }
-        return res.status(400).json({ success: false, error: `Upload error: ${err.message}` });
       }
-      return res.status(400).json({ success: false, error: err.message || 'File upload error.' });
-    }
-    next();
-  });
-};
+      try {
+        documents.recordUploadFailure({
+          actor: req.user, ownerRef: req.body && req.body.supervisorId, filename: req.pendingFileName || null,
+          categoryRef: req.body && (req.body.categoryId || req.body.category), batchId: req.body && req.body.batchId,
+          code, reason: message, ip: req.socket.remoteAddress,
+        });
+      } catch (_) { /* never mask the real error */ }
+      next(Object.assign(new Error(message), { status, code }));
+    });
+  };
+}
 
-const handleMediaUpload = (req, res, next) => {
-  mediaUpload.single('mediaFile')(req, res, (err) => {
-    if (err) {
-      if (err instanceof multer.MulterError) {
-        if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ success: false, error: 'Media size exceeds maximum limit (100MB).' });
-        }
-        return res.status(400).json({ success: false, error: `Upload error: ${err.message}` });
-      }
-      return res.status(400).json({ success: false, error: err.message || 'Media upload error.' });
-    }
-    next();
-  });
-};
+const auth = [requireAuth(), requireRole('supervisor', 'admin')];
 
-// 1. Document & Image Upload (.pdf, .txt, .md, .jpg, .png, .webp)
-router.post('/upload-book', handleDocumentUpload, processBookUpload);
+router.use(auth);
 
-// 2. Raw Text Ingestion
-router.post('/raw-text', processRawTextInput);
+router.post('/batches', asyncHandler(c.createBatch));
+router.get('/batches/:id', asyncHandler(c.getBatch));
+router.post('/batches/:id/retry-failed', asyncHandler(c.retryFailedInBatch));
 
-// 3. Video & Audio Speech-to-Text Ingestion (.mp4, .mp3, .wav, etc.)
-router.post('/media', handleMediaUpload, processMediaUpload);
-
-// 4. Web URL Scraper Ingestion
-router.post('/scrape-url', processUrlScraping);
-
-// 5. Books listing endpoint
-router.get('/books', listIndexedBooks);
-
-// 6. Data Vault file download endpoint
-router.get('/vault/:filename', downloadVaultFile);
+router.post('/upload-book', handle(docUpload, 'bookFile', config.maxFileMb), asyncHandler(c.uploadFile('document')));
+router.post('/media', handle(mediaUpload, 'mediaFile', config.maxMediaMb), asyncHandler(c.uploadFile('media')));
+router.post('/raw-text', asyncHandler(c.rawText));
+router.post('/scrape-url', asyncHandler(c.scrapeUrl));
+router.get('/books', asyncHandler(c.listBooks));
 
 module.exports = router;

@@ -1,503 +1,114 @@
-const fs = require('fs');
-const path = require('path');
-const { parsePDFDocument } = require('../utils/pdfParser');
-const { extractTextFromImage } = require('../utils/imageOcr');
-const { chunkDocumentText, calculateEstimatedPages } = require('../utils/textChunker');
-const { generateVectorEmbedding } = require('../services/embeddingService');
-const { transcribeMediaFile } = require('../utils/mediaTranscriber');
+const dns = require('dns').promises;
+const net = require('net');
+const { AppError } = require('../utils/errors');
+const documents = require('../services/documentService');
+const jobQueue = require('../services/jobQueue');
 const { scrapeWebUrl } = require('../utils/urlScraper');
-const storageService = require('../services/storageService');
-const { insertIntoVectorDatabase, getStoredBooksSummary } = require('../models/vectorDbModel');
 
-/**
- * Handles uploading, permanent Data Vault archiving, and indexing of files (.pdf, .txt, .md, .jpg, .png, .webp).
- */
-async function processBookUpload(req, res) {
-  let uploadedFilePath = null;
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  return (fwd ? String(fwd).split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+}
 
+function isPrivateAddress(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  const l = ip.toLowerCase();
+  return l === '::1' || l === '::' || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('fe80') || l.startsWith('::ffff:127.') || l.startsWith('::ffff:10.') || l.startsWith('::ffff:192.168.');
+}
+
+/** SSRF guard: only public http(s) hosts may be scraped. */
+async function assertPublicUrl(rawUrl) {
+  let u;
   try {
+    u = new URL(rawUrl);
+  } catch (_) {
+    throw new AppError(400, 'URL_INVALID', 'A valid http(s) URL is required.');
+  }
+  if (!['http:', 'https:'].includes(u.protocol)) throw new AppError(400, 'URL_INVALID', 'Only http and https URLs are allowed.');
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true }).catch(() => []);
+  if (!addrs.length) throw new AppError(422, 'URL_UNRESOLVABLE', 'The URL host could not be resolved.');
+  if (addrs.some((a) => isPrivateAddress(a.address))) throw new AppError(400, 'URL_FORBIDDEN', 'This URL points to a private or internal network address.');
+}
+
+function shape(doc, message) {
+  const d = documents.mapDocument(doc);
+  return { success: true, message, data: { ...d, bookTitle: d.title, totalChunks: d.chunkCount } };
+}
+
+function uploadFile(expectKind) {
+  return async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No file uploaded. Please upload a valid document or image (.pdf, .txt, .md, .jpg, .png, .webp) using the "bookFile" field.',
-      });
+      throw new AppError(400, 'NO_FILE', 'No file was received. Select a file and try again.');
     }
-
-    uploadedFilePath = req.file.path;
-    const fileExt = path.extname(req.file.originalname).toLowerCase();
-    const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(fileExt);
-    const uploadType = isImage ? 'image' : 'book';
-    const bookTitle = req.body.title || req.file.originalname.replace(/\.[^/.]+$/, '');
-    const uploadedBy = req.body.uploadedBy || req.headers['x-supervisor-id'] || 'supervisor_default@masruq.com';
-    const category = (req.body.category || 'General').trim();
-    const language = (req.body.language || 'Arabic').trim();
-    const chunkSize = parseInt(req.body.chunkSize, 10) || parseInt(process.env.MAX_CHUNK_SIZE, 10) || 800;
-    const chunkOverlap = parseInt(req.body.chunkOverlap, 10) || parseInt(process.env.CHUNK_OVERLAP, 10) || 150;
-
-    console.log(`[Ingestion] Starting Data Vault processing for: "${bookTitle}" [${category} / ${language}] (${fileExt}, type=${uploadType}) by: "${uploadedBy}"`);
-
-    let rawDocumentText = '';
-    let totalPages = 1;
-
-    if (isImage) {
-      console.log(`[Ingestion] Performing Gemini Multimodal OCR on image: ${req.file.originalname}`);
-      rawDocumentText = await extractTextFromImage(uploadedFilePath);
-      totalPages = 1;
-    } else if (fileExt === '.pdf') {
-      const pdfResult = await parsePDFDocument(uploadedFilePath);
-      rawDocumentText = pdfResult.text;
-      totalPages = pdfResult.numPages;
-    } else if (fileExt === '.txt' || fileExt === '.md') {
-      rawDocumentText = fs.readFileSync(uploadedFilePath, 'utf-8').trim();
-      totalPages = calculateEstimatedPages(rawDocumentText);
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: `Unsupported file type: ${fileExt}. Supported formats: .pdf, .txt, .md, .jpg, .jpeg, .png, .webp.`,
-      });
-    }
-
-    if (!rawDocumentText || rawDocumentText.length === 0) {
-      return res.status(422).json({
-        success: false,
-        error: 'The uploaded document contains no readable text.',
-      });
-    }
-
-    const vaultResult = await storageService.saveUploadedFileToVault(
-      uploadedFilePath,
-      req.file.originalname,
-      uploadedBy,
-      category
-    );
-    uploadedFilePath = null;
-
-    const textChunksArray = chunkDocumentText(rawDocumentText, chunkSize, chunkOverlap);
-    const uploadTimestamp = new Date().toISOString();
-    let storedCount = 0;
-
-    for (let index = 0; index < textChunksArray.length; index++) {
-      const chunk = textChunksArray[index];
-      const embeddingVector = await generateVectorEmbedding(chunk);
-
-      await insertIntoVectorDatabase(bookTitle, chunk, embeddingVector, {
-        category,
-        language,
-        uploadedBy,
-        uploadType,
-        totalPages,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        chunkIndex: index,
-        totalChunks: textChunksArray.length,
-        sourceType: fileExt.replace('.', ''),
-        characterCount: rawDocumentText.length,
-        fileSize: vaultResult.fileSize,
-        createdAt: uploadTimestamp,
-        uploadedAt: uploadTimestamp,
-      });
-
-      storedCount++;
-    }
-
-    console.log(`[Ingestion] Successfully indexed "${bookTitle}" in Data Vault under "${category}" (${storedCount} chunks, ${totalPages} pages, type=${uploadType}).`);
-
-    return res.status(200).json({
-      success: true,
-      message: isImage
-        ? 'Image processed with OCR, archived in Data Vault, and indexed successfully.'
-        : 'Document permanently archived in Data Vault and indexed successfully.',
-      data: {
-        bookTitle,
-        category,
-        language,
-        uploadedBy,
-        uploadType,
-        totalPages,
-        createdAt: uploadTimestamp,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        totalChunks: storedCount,
-        characterCount: rawDocumentText.length,
-        fileSize: vaultResult.fileSize,
-        sourceType: fileExt.replace('.', ''),
-      },
+    const doc = await documents.storeUploadedFile({
+      file: req.file,
+      body: { ...req.body, _expectKind: expectKind },
+      actor: req.user,
+      ip: clientIp(req),
     });
-  } catch (error) {
-    console.error('[Ingestion] Error during Data Vault file pipeline:', error);
-
-    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-      try {
-        fs.unlinkSync(uploadedFilePath);
-      } catch (cleanupErr) {
-        console.error('[Ingestion] Cleanup error:', cleanupErr);
-      }
-    }
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Server failed to process and archive the document.',
-    });
-  }
+    jobQueue.enqueue(doc.id);
+    res.status(201).json(shape(doc, 'File stored successfully. Processing has been queued.'));
+  };
 }
 
-/**
- * Handles raw text input directly.
- */
-async function processRawTextInput(req, res) {
-  try {
-    const { title, textContent, uploadedBy, category: reqCategory, language: reqLanguage, chunkSize, chunkOverlap } = req.body;
-
-    if (!textContent || typeof textContent !== 'string' || textContent.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'A valid "textContent" string is required in the request body.',
-      });
-    }
-
-    const trimmedText = textContent.trim();
-    const docTitle = (title && typeof title === 'string' && title.trim().length > 0)
-      ? title.trim()
-      : `Pasted Note (${new Date().toLocaleDateString()})`;
-
-    const supervisorId = uploadedBy || req.headers['x-supervisor-id'] || 'supervisor_default@masruq.com';
-    const category = (reqCategory || 'General').trim();
-    const language = (reqLanguage || 'Arabic').trim();
-    const targetChunkSize = parseInt(chunkSize, 10) || parseInt(process.env.MAX_CHUNK_SIZE, 10) || 800;
-    const targetOverlap = parseInt(chunkOverlap, 10) || parseInt(process.env.CHUNK_OVERLAP, 10) || 150;
-
-    const vaultResult = await storageService.saveRawTextToVault(
-      trimmedText,
-      docTitle,
-      supervisorId,
-      category
-    );
-
-    const textChunksArray = chunkDocumentText(trimmedText, targetChunkSize, targetOverlap);
-    const totalPages = calculateEstimatedPages(trimmedText);
-    const uploadTimestamp = new Date().toISOString();
-    let storedCount = 0;
-
-    for (let index = 0; index < textChunksArray.length; index++) {
-      const chunk = textChunksArray[index];
-      const embeddingVector = await generateVectorEmbedding(chunk);
-
-      await insertIntoVectorDatabase(docTitle, chunk, embeddingVector, {
-        category,
-        language,
-        uploadedBy: supervisorId,
-        uploadType: 'raw-text',
-        totalPages,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        chunkIndex: index,
-        totalChunks: textChunksArray.length,
-        sourceType: 'txt',
-        characterCount: trimmedText.length,
-        fileSize: vaultResult.fileSize,
-        createdAt: uploadTimestamp,
-        uploadedAt: uploadTimestamp,
-      });
-
-      storedCount++;
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Raw text saved as file in Data Vault and indexed successfully.',
-      data: {
-        bookTitle: docTitle,
-        category,
-        language,
-        uploadedBy: supervisorId,
-        uploadType: 'raw-text',
-        totalPages,
-        createdAt: uploadTimestamp,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        totalChunks: storedCount,
-        characterCount: trimmedText.length,
-        fileSize: vaultResult.fileSize,
-        sourceType: 'txt',
-      },
-    });
-  } catch (error) {
-    console.error('[Ingestion] Error during raw text pipeline:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Server failed to save and index the raw text.',
-    });
-  }
+async function rawText(req, res) {
+  const { title, textContent } = req.body || {};
+  const doc = await documents.storeRawText({ title, textContent, body: req.body || {}, actor: req.user, ip: clientIp(req) });
+  jobQueue.enqueue(doc.id);
+  res.status(201).json(shape(doc, 'Text stored successfully. Indexing has been queued.'));
 }
 
-/**
- * Handles Video / Audio upload, Speech-to-Text transcription via Gemini, Data Vault archival, and vector indexing.
- *
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- */
-async function processMediaUpload(req, res) {
-  let uploadedFilePath = null;
-
+async function scrapeUrl(req, res) {
+  const { url, title } = req.body || {};
   try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No media file uploaded. Please upload a valid video/audio file using the "mediaFile" field.',
-      });
-    }
-
-    uploadedFilePath = req.file.path;
-    const fileExt = path.extname(req.file.originalname).toLowerCase();
-    const mediaTitle = req.body.title || req.file.originalname.replace(/\.[^/.]+$/, '');
-    const supervisorId = req.body.uploadedBy || req.headers['x-supervisor-id'] || 'supervisor_default@masruq.com';
-    const category = (req.body.category || 'General').trim();
-    const language = (req.body.language || 'Arabic').trim();
-    const chunkSize = parseInt(req.body.chunkSize, 10) || parseInt(process.env.MAX_CHUNK_SIZE, 10) || 800;
-    const chunkOverlap = parseInt(req.body.chunkOverlap, 10) || parseInt(process.env.CHUNK_OVERLAP, 10) || 150;
-
-    console.log(`[Ingestion] Starting Media Speech-to-Text for: "${mediaTitle}" [${category} / ${language}] (${fileExt}) by "${supervisorId}"`);
-
-    // Step 1: Transcribe the media file using Gemini multimodal speech-to-text
-    const transcriptText = await transcribeMediaFile(uploadedFilePath);
-
-    // Step 2: Permanently archive the original media file in Data Vault by category
-    const vaultResult = await storageService.saveUploadedFileToVault(
-      uploadedFilePath,
-      req.file.originalname,
-      supervisorId,
-      category
-    );
-    uploadedFilePath = null;
-
-    // Step 3: Also archive the transcript as a .txt companion file in Data Vault
-    await storageService.saveRawTextToVault(
-      transcriptText,
-      `${mediaTitle}_transcript`,
-      supervisorId,
-      category
-    );
-
-    // Step 4: Chunk transcript and generate vector embeddings
-    const textChunksArray = chunkDocumentText(transcriptText, chunkSize, chunkOverlap);
-    const totalPages = calculateEstimatedPages(transcriptText);
-    console.log(`[Ingestion] Generated ${textChunksArray.length} chunks from media transcript of "${mediaTitle}" (${totalPages} estimated pages)`);
-
-    const uploadTimestamp = new Date().toISOString();
-    let storedCount = 0;
-
-    for (let index = 0; index < textChunksArray.length; index++) {
-      const chunk = textChunksArray[index];
-      const embeddingVector = await generateVectorEmbedding(chunk);
-
-      await insertIntoVectorDatabase(mediaTitle, chunk, embeddingVector, {
-        category,
-        language,
-        uploadedBy: supervisorId,
-        uploadType: 'media',
-        totalPages,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        chunkIndex: index,
-        totalChunks: textChunksArray.length,
-        sourceType: fileExt.replace('.', ''),
-        characterCount: transcriptText.length,
-        fileSize: vaultResult.fileSize,
-        createdAt: uploadTimestamp,
-        uploadedAt: uploadTimestamp,
-      });
-
-      storedCount++;
-    }
-
-    console.log(`[Ingestion] Successfully indexed media transcript "${mediaTitle}" in Data Vault (${storedCount} chunks).`);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Media transcribed, archived in Data Vault, and indexed successfully.',
-      data: {
-        bookTitle: mediaTitle,
-        category,
-        language,
-        uploadedBy: supervisorId,
-        uploadType: 'media',
-        totalPages,
-        createdAt: uploadTimestamp,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        totalChunks: storedCount,
-        characterCount: transcriptText.length,
-        fileSize: vaultResult.fileSize,
-        sourceType: fileExt.replace('.', ''),
-        transcriptPreview: transcriptText.slice(0, 300) + (transcriptText.length > 300 ? '...' : ''),
-      },
-    });
-  } catch (error) {
-    console.error('[Ingestion] Error during media transcription pipeline:', error);
-
-    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-      try {
-        fs.unlinkSync(uploadedFilePath);
-      } catch (cleanupErr) {
-        console.error('[Ingestion] Cleanup error:', cleanupErr);
-      }
-    }
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to transcribe and index media file.',
-    });
-  }
-}
-
-/**
- * Handles Web URL Scraping, Data Vault text archival, and vector indexing.
- *
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- */
-async function processUrlScraping(req, res) {
-  try {
-    const { url, title, uploadedBy, category: reqCategory, language: reqLanguage, chunkSize, chunkOverlap } = req.body;
-
-    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-      return res.status(400).json({
-        success: false,
-        error: 'A valid "url" starting with http:// or https:// is required.',
-      });
-    }
-
-    const supervisorId = uploadedBy || req.headers['x-supervisor-id'] || 'supervisor_default@masruq.com';
-    const category = (reqCategory || 'General').trim();
-    const language = (reqLanguage || 'Arabic').trim();
-    const targetChunkSize = parseInt(chunkSize, 10) || parseInt(process.env.MAX_CHUNK_SIZE, 10) || 800;
-    const targetOverlap = parseInt(chunkOverlap, 10) || parseInt(process.env.CHUNK_OVERLAP, 10) || 150;
-
-    console.log(`[Ingestion] Scraping Web URL: "${url}" [${category} / ${language}] by "${supervisorId}"`);
-
-    // Step 1: Scrape clean article content
-    const scrapedData = await scrapeWebUrl(url);
-    const docTitle = (title && typeof title === 'string' && title.trim().length > 0)
-      ? title.trim()
-      : scrapedData.title;
-
-    // Step 2: Archive scraped article as a .txt file in Data Vault by category
-    const vaultResult = await storageService.saveRawTextToVault(
-      `Source URL: ${url}\nTitle: ${docTitle}\nCategory: ${category}\nLanguage: ${language}\n\n${scrapedData.content}`,
-      docTitle,
-      supervisorId,
-      category
-    );
-
-    // Step 3: Chunk scraped text and generate vector embeddings
-    const textChunksArray = chunkDocumentText(scrapedData.content, targetChunkSize, targetOverlap);
-    const totalPages = calculateEstimatedPages(scrapedData.content);
-    console.log(`[Ingestion] Generated ${textChunksArray.length} chunks from scraped URL "${docTitle}" (${totalPages} estimated pages)`);
-
-    const uploadTimestamp = new Date().toISOString();
-    let storedCount = 0;
-
-    for (let index = 0; index < textChunksArray.length; index++) {
-      const chunk = textChunksArray[index];
-      const embeddingVector = await generateVectorEmbedding(chunk);
-
-      await insertIntoVectorDatabase(docTitle, chunk, embeddingVector, {
-        category,
-        language,
-        uploadedBy: supervisorId,
-        uploadType: 'url',
-        totalPages,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        chunkIndex: index,
-        totalChunks: textChunksArray.length,
-        sourceType: 'url',
-        characterCount: scrapedData.content.length,
-        fileSize: vaultResult.fileSize,
-        createdAt: uploadTimestamp,
-        uploadedAt: uploadTimestamp,
-      });
-
-      storedCount++;
-    }
-
-    console.log(`[Ingestion] Successfully indexed web URL "${docTitle}" into Data Vault (${storedCount} chunks).`);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Web page scraped, archived in Data Vault, and indexed successfully.',
-      data: {
-        bookTitle: docTitle,
-        category,
-        language,
-        url,
-        uploadedBy: supervisorId,
-        uploadType: 'url',
-        totalPages,
-        createdAt: uploadTimestamp,
-        rawFileUrl: vaultResult.rawFileUrl,
-        storageReference: vaultResult.storageReference,
-        totalChunks: storedCount,
-        characterCount: scrapedData.content.length,
-        fileSize: vaultResult.fileSize,
-        sourceType: 'url',
-      },
-    });
-  } catch (error) {
-    console.error('[Ingestion] Error during URL scraping pipeline:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to scrape and index web URL.',
-    });
-  }
-}
-
-/**
- * Downloads a raw file from Data Vault by filename and optional category.
- */
-async function downloadVaultFile(req, res) {
-  try {
-    const { filename, category } = req.params;
-    if (!filename) {
-      return res.status(400).json({ success: false, error: 'Filename is required.' });
-    }
-
-    const filePath = storageService.getVaultFilePath(filename, category);
-    if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, error: 'File not found in Data Vault.' });
-    }
-
-    res.download(filePath, filename);
+    await assertPublicUrl(url);
+    const scraped = await scrapeWebUrl(url);
+    const doc = await documents.storeScrapedUrl({ url, title, scraped, body: req.body || {}, actor: req.user, ip: clientIp(req) });
+    jobQueue.enqueue(doc.id);
+    return res.status(201).json(shape(doc, 'Page content stored successfully. Indexing has been queued.'));
   } catch (err) {
-    console.error('[Storage] Error downloading vault file:', err);
-    res.status(500).json({ success: false, error: 'Failed to access Data Vault file.' });
+    if (!(err instanceof AppError) || err.code.startsWith('URL_')) {
+      documents.recordUploadFailure({
+        actor: req.user, ownerRef: (req.body || {}).supervisorId, filename: url, categoryRef: (req.body || {}).categoryId || (req.body || {}).category,
+        batchId: (req.body || {}).batchId, code: err.code || 'SCRAPE_FAILED', reason: err.message, ip: clientIp(req), kind: 'url', fileType: 'url',
+      });
+    }
+    if (err instanceof AppError) throw err;
+    throw new AppError(422, 'SCRAPE_FAILED', err.message || 'Could not extract text from this URL. Paste the text manually instead.');
   }
 }
 
-/**
- * Lists all indexed documents.
- */
-async function listIndexedBooks(req, res) {
-  try {
-    const books = await getStoredBooksSummary();
-    return res.status(200).json({
-      success: true,
-      data: books,
-    });
-  } catch (error) {
-    console.error('[Ingestion] Error listing books:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve indexed documents.',
-    });
-  }
+async function createBatch(req, res) {
+  const batch = documents.createBatch({ declaredCount: (req.body || {}).declaredCount, supervisorId: (req.body || {}).supervisorId }, req.user);
+  res.status(201).json({ success: true, data: batch });
 }
 
-module.exports = {
-  processBookUpload,
-  processRawTextInput,
-  processMediaUpload,
-  processUrlScraping,
-  downloadVaultFile,
-  listIndexedBooks,
-};
+async function getBatch(req, res) {
+  res.json({ success: true, data: documents.batchSummary(req.params.id, req.user) });
+}
+
+async function retryFailedInBatch(req, res) {
+  const summary = documents.batchSummary(req.params.id, req.user);
+  let queued = 0;
+  const skipped = [];
+  for (const f of summary.files) {
+    if (f.pipelineStatus !== 'failed') continue;
+    try {
+      if (jobQueue.retryDocument(f.id, req.user, { ip: clientIp(req) }).queued) queued++;
+    } catch (e) {
+      skipped.push({ id: f.id, code: e.code });
+    }
+  }
+  res.json({ success: true, data: { queued, skipped } });
+}
+
+async function listBooks(req, res) {
+  const result = documents.listDocuments({ ...req.query, status: 'completed', pageSize: req.query.pageSize || 200 }, req.user);
+  res.json({ success: true, data: result.items.map((d) => ({ ...d, bookTitle: d.title, totalChunks: d.chunkCount })) });
+}
+
+module.exports = { uploadFile, rawText, scrapeUrl, createBatch, getBatch, retryFailedInBatch, listBooks, assertPublicUrl, isPrivateAddress };

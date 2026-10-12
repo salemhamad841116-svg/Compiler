@@ -39,21 +39,28 @@
      * @param {string} [fallback='']
      * @returns {string}
      */
-    t(key, fallback = '') {
-      if (!key) return fallback;
-      const dict = this.translations[this.currentLang] || {};
-      const parts = key.split('.');
-      let current = dict;
+    t(key, fallbackOrVars = '', maybeVars) {
+      if (!key) return typeof fallbackOrVars === 'string' ? fallbackOrVars : '';
+      let fallback = '';
+      let vars = null;
+      if (typeof fallbackOrVars === 'object' && fallbackOrVars !== null) vars = fallbackOrVars;
+      else fallback = fallbackOrVars || '';
+      if (maybeVars && typeof maybeVars === 'object') vars = maybeVars;
 
-      for (let i = 0; i < parts.length; i++) {
-        if (current && typeof current === 'object' && parts[i] in current) {
-          current = current[parts[i]];
-        } else {
-          return fallback || key;
+      const lookup = (dict) => {
+        let current = dict || {};
+        for (const part of key.split('.')) {
+          if (current && typeof current === 'object' && part in current) current = current[part];
+          else return null;
         }
-      }
-
-      return typeof current === 'string' ? current : (fallback || key);
+        return typeof current === 'string' ? current : null;
+      };
+      // Current language first, then English as a safety net, then the caller fallback, then the raw key.
+      let out = lookup(this.translations[this.currentLang]);
+      if (out === null) out = lookup(this.translations.en);
+      if (out === null) out = fallback || key;
+      if (vars) out = out.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? String(vars[name]) : m));
+      return out;
     }
 
     /**
@@ -101,6 +108,7 @@
     async setLanguage(lang) {
       const targetLang = this.allowedLangs.includes(lang) ? lang : 'en';
       await this.loadDictionary(targetLang);
+      if (targetLang !== 'en') await this.loadDictionary('en');
 
       this.currentLang = targetLang;
       this.isLoaded = true;

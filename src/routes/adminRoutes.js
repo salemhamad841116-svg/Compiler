@@ -1,38 +1,215 @@
 const express = require('express');
-const {
-  getSupervisorsList,
-  getSupervisorDetails,
-  getAuditLogs,
-  getSystemOverview,
-  getAllDocuments,
-  deleteDocument,
-  updateDocument,
-  getDocumentChunksList,
-  searchVaultTest,
-} = require('../controllers/adminController');
+const { requireAuth, requireRole, asyncHandler } = require('../auth/middleware');
+const authService = require('../auth/authService');
+const audit = require('../services/auditService');
+const presence = require('../services/presenceService');
+const stats = require('../services/statsService');
+const documents = require('../services/documentService');
+const jobQueue = require('../services/jobQueue');
+const storage = require('../services/storageService');
+const reconcile = require('../services/reconcileService');
+const { provider, classifyError } = require('../services/aiProvider');
+const { searchVectorDatabase } = require('../models/vectorDbModel');
+const { AppError } = require('../utils/errors');
+const { nowIso } = require('../utils/clock');
+const config = require('../config');
 
 const router = express.Router();
+router.use(requireAuth(), requireRole('admin'));
 
-// GET all supervisors with aggregated stats
-router.get('/supervisors', getSupervisorsList);
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  return (fwd ? String(fwd).split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+}
 
-// GET comprehensive supervisor audit logs and lifetime totals
-router.get('/audit-logs', getAuditLogs);
+function invitationPayload(inv) {
+  return {
+    path: `/?invite=${inv.token}`,
+    token: inv.token,
+    expiresAt: inv.expiresAt,
+    purpose: inv.purpose,
+    note: 'Share this one-time link with the supervisor through a secure channel. It is shown only once.',
+  };
+}
 
-// GET specific supervisor details and indexed document list
-router.get('/supervisors/:supervisorId', getSupervisorDetails);
+// ----------------------------------------------------------- overview / stats
+router.get(
+  '/overview',
+  asyncHandler(async (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        ...stats.overview({}),
+        queue: jobQueue.queueStats(),
+        users: {
+          supervisors: authService.listUsers().filter((u) => u.role === 'supervisor').length,
+        },
+      },
+    });
+  })
+);
 
-// GET global system overview metrics
-router.get('/overview', getSystemOverview);
+router.get(
+  '/stats/supervisors',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: stats.perSupervisor() });
+  })
+);
 
-// Document Management & Control Endpoints
-router.get('/documents', getAllDocuments);
-router.delete('/documents/:title', deleteDocument);
-router.put('/documents/:title', updateDocument);
-router.get('/documents/:title/chunks', getDocumentChunksList);
+// ----------------------------------------------------------- accounts
+router.get(
+  '/users',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: authService.listUsers() });
+  })
+);
 
-// Diagnostic Vector Search Test Endpoint
-router.post('/search-test', searchVaultTest);
+/** Supervisors with live presence and per-supervisor stats in a single, consistent payload. */
+router.get(
+  '/supervisors',
+  asyncHandler(async (req, res) => {
+    const pres = new Map(presence.computePresence().map((p) => [p.id, p]));
+    const per = new Map(stats.perSupervisor().items.map((i) => [i.supervisor.id, i]));
+    const items = authService
+      .listUsers()
+      .filter((u) => u.role === 'supervisor')
+      .map((u) => ({ ...u, presence: pres.get(u.id) || null, stats: per.get(u.id) || null }));
+    res.json({ success: true, count: items.length, data: items, unattributedDocuments: stats.perSupervisor().unattributedDocuments });
+  })
+);
+
+router.post(
+  '/supervisors',
+  asyncHandler(async (req, res) => {
+    const { name, email } = req.body || {};
+    const { user, invitation } = authService.createUser({ name, email, role: 'supervisor' }, req.user);
+    res.status(201).json({ success: true, data: user, invitation: invitationPayload(invitation) });
+  })
+);
+
+router.patch(
+  '/supervisors/:id',
+  asyncHandler(async (req, res) => {
+    const { name, status } = req.body || {};
+    res.json({ success: true, data: authService.updateUser(req.params.id, { name, status }, req.user) });
+  })
+);
+
+router.post(
+  '/supervisors/:id/invitation',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, invitation: invitationPayload(authService.issueInvitationForUser(req.params.id, req.user)) });
+  })
+);
+
+router.post(
+  '/supervisors/:id/revoke-sessions',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: { revoked: authService.revokeUserSessions(req.params.id, req.user) } });
+  })
+);
+
+// ----------------------------------------------------------- presence
+router.get(
+  '/presence',
+  asyncHandler(async (req, res) => {
+    res.json({
+      success: true,
+      generatedAt: nowIso(),
+      policy: { heartbeatIntervalSeconds: config.heartbeatIntervalSec, offlineAfterSeconds: config.offlineAfterSec, awayAfterSeconds: config.awayAfterSec, displayTimeZone: config.displayTimeZone },
+      data: presence.computePresence(),
+    });
+  })
+);
+
+router.get(
+  '/presence/:id/sessions',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: { sessions: presence.listUserSessions(req.params.id), events: presence.listSessionEvents(req.params.id) } });
+  })
+);
+
+// ----------------------------------------------------------- activity
+router.get(
+  '/activity',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: audit.listActivity(req.query, null) });
+  })
+);
+
+router.get(
+  '/activity.csv',
+  asyncHandler(async (req, res) => {
+    const rows = audit.exportActivityRows(req.query, null);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="activity-log.csv"');
+    res.send(audit.activityToCsv(rows));
+  })
+);
+
+// ----------------------------------------------------------- documents (admin-wide)
+router.get(
+  '/documents',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: documents.listDocuments(req.query, req.user) });
+  })
+);
+
+router.post(
+  '/documents/:id/retry',
+  asyncHandler(async (req, res) => {
+    const force = req.body && req.body.force === true;
+    res.json({ success: true, data: jobQueue.retryDocument(req.params.id, req.user, { force, ip: clientIp(req) }) });
+  })
+);
+
+// ----------------------------------------------------------- system
+router.get(
+  '/system/health',
+  asyncHandler(async (req, res) => {
+    const check = req.query.check === '1';
+    const ai = await provider().health({ check });
+    res.json({
+      success: true,
+      data: { time: nowIso(), ai, storage: storage.health(), queue: jobQueue.queueStats(), lastReconciliation: reconcile.lastReport() },
+    });
+  })
+);
+
+router.get(
+  '/system/reconcile',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: reconcile.lastReport() });
+  })
+);
+
+router.post(
+  '/system/reconcile',
+  asyncHandler(async (req, res) => {
+    const apply = Boolean(req.body && req.body.apply);
+    res.json({ success: true, data: reconcile.runReconciliation({ apply, actor: req.user }) });
+  })
+);
+
+router.post(
+  '/search-test',
+  asyncHandler(async (req, res) => {
+    const { query, category, language, topK = 5, minSimilarity = 0.3 } = req.body || {};
+    if (!query || !String(query).trim()) throw new AppError(400, 'QUERY_REQUIRED', 'Search query is required.');
+    const filterOptions = {};
+    if (category && category !== 'All') filterOptions.category = category;
+    if (language && language !== 'All') filterOptions.language = language;
+    try {
+      const emb = await provider().embed(String(query).trim());
+      const parsedMin = parseFloat(minSimilarity);
+      const results = await searchVectorDatabase(emb, parseInt(topK, 10) || 5, Number.isFinite(parsedMin) ? parsedMin : 0.3, filterOptions);
+      res.json({ success: true, query: String(query).trim(), matchesFound: results.length, data: results });
+    } catch (e) {
+      if (e instanceof AppError) throw e;
+      const c = classifyError(e);
+      throw new AppError(c.retryable ? 503 : 502, c.code, c.message);
+    }
+  })
+);
 
 module.exports = router;
-
