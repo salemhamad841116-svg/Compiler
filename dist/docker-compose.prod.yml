@@ -25,7 +25,10 @@ services:
     ports:
       - "3000:3000"
     networks:
-      - masruq_network
+      masruq_network:
+        aliases:
+          - masruq_rag_backend
+          - rag-backend
 
   # ----------------------------------------------------------------------------
   # 2. Standalone Supervisor Data Entry Frontend (waraqa.msruq.com)
@@ -42,7 +45,10 @@ services:
     depends_on:
       - rag-backend
     networks:
-      - masruq_network
+      masruq_network:
+        aliases:
+          - masruq_waraqa_frontend
+          - waraqa-frontend
 
   # ----------------------------------------------------------------------------
   # 3. Enterprise Gateway Reverse Proxy (Subdomain Dispatch & SSL Termination)
@@ -61,7 +67,10 @@ services:
       - rag-backend
       - waraqa-frontend
     networks:
-      - masruq_network
+      masruq_network:
+        aliases:
+          - masruq_gateway_proxy
+          - gateway-proxy
 
 # ------------------------------------------------------------------------------
 # Persistent Storage Volumes
