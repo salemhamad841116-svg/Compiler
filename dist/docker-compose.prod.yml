@@ -1,8 +1,8 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. Private Gemini RAG Backend & Data Vault API (api.msruq.com)
+  # 1. Private Gemini RAG Backend & Data Vault API (api.misruq.com)
   # ----------------------------------------------------------------------------
   rag-backend:
     build:
@@ -31,7 +31,7 @@ services:
           - rag-backend
 
   # ----------------------------------------------------------------------------
-  # 2. Standalone Supervisor Data Entry Frontend (waraqa.msruq.com)
+  # 2. Standalone Supervisor Data Entry Frontend (waraqa.misruq.com)
   # ----------------------------------------------------------------------------
   waraqa-frontend:
     image: nginx:alpine
@@ -39,6 +39,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./public/supervisor:/usr/share/nginx/html:ro
+      - ./public:/var/www/public:ro
       - ./deploy/nginx/supervisor-standalone.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8081:80"
@@ -49,9 +50,54 @@ services:
         aliases:
           - masruq_waraqa_frontend
           - waraqa-frontend
+          - supervisor-frontend
 
   # ----------------------------------------------------------------------------
-  # 3. Enterprise Gateway Reverse Proxy (Subdomain Dispatch & SSL Termination)
+  # 3. Standalone Super Admin Dashboard Frontend (logs.misruq.com / admin.misruq.com)
+  # ----------------------------------------------------------------------------
+  admin-frontend:
+    image: nginx:alpine
+    container_name: masruq_admin_frontend
+    restart: unless-stopped
+    volumes:
+      - ./public/admin:/usr/share/nginx/html:ro
+      - ./public:/var/www/public:ro
+      - ./deploy/nginx/admin-standalone.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8082:80"
+    depends_on:
+      - rag-backend
+    networks:
+      masruq_network:
+        aliases:
+          - masruq_admin_frontend
+          - admin-frontend
+          - logs-frontend
+
+  # ----------------------------------------------------------------------------
+  # 4. Standalone Public User Chat Interface Frontend (bahth.misruq.com)
+  # ----------------------------------------------------------------------------
+  bahth-frontend:
+    image: nginx:alpine
+    container_name: masruq_bahth_frontend
+    restart: unless-stopped
+    volumes:
+      - ./public/chat:/usr/share/nginx/html:ro
+      - ./public:/var/www/public:ro
+      - ./deploy/nginx/bahth-standalone.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8083:80"
+    depends_on:
+      - rag-backend
+    networks:
+      masruq_network:
+        aliases:
+          - masruq_bahth_frontend
+          - bahth-frontend
+          - chat-frontend
+
+  # ----------------------------------------------------------------------------
+  # 5. Enterprise Gateway Reverse Proxy (Subdomain Dispatch & Cloudflare Ingress)
   # ----------------------------------------------------------------------------
   gateway-proxy:
     image: nginx:alpine
@@ -66,6 +112,8 @@ services:
     depends_on:
       - rag-backend
       - waraqa-frontend
+      - admin-frontend
+      - bahth-frontend
     networks:
       masruq_network:
         aliases:
