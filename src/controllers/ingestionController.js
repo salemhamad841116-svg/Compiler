@@ -55,6 +55,21 @@ function uploadFile(expectKind) {
   };
 }
 
+async function uploadBookImages(req, res) {
+  const files = req.files || (req.file ? [req.file] : []);
+  if (!files.length) {
+    throw new AppError(400, 'NO_FILES', 'No image files were received. Select one or more images and try again.');
+  }
+  const doc = await documents.storeBookImages({
+    files,
+    body: req.body || {},
+    actor: req.user,
+    ip: clientIp(req),
+  });
+  jobQueue.enqueue(doc.id);
+  res.status(201).json(shape(doc, 'Book images stored successfully. OCR and indexing queued.'));
+}
+
 async function rawText(req, res) {
   const { title, textContent } = req.body || {};
   const doc = await documents.storeRawText({ title, textContent, body: req.body || {}, actor: req.user, ip: clientIp(req) });
@@ -111,4 +126,4 @@ async function listBooks(req, res) {
   res.json({ success: true, data: result.items.map((d) => ({ ...d, bookTitle: d.title, totalChunks: d.chunkCount })) });
 }
 
-module.exports = { uploadFile, rawText, scrapeUrl, createBatch, getBatch, retryFailedInBatch, listBooks, assertPublicUrl, isPrivateAddress };
+module.exports = { uploadFile, uploadBookImages, rawText, scrapeUrl, createBatch, getBatch, retryFailedInBatch, listBooks, assertPublicUrl, isPrivateAddress };

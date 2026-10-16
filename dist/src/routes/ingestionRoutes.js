@@ -42,6 +42,13 @@ const mediaUpload = makeUpload(config.maxMediaMb, (req, file, cb) => {
   return cb(Object.assign(new Error(`Unsupported media type "${ext}".`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
+const imageUpload = makeUpload(config.maxFileMb, (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const kind = documents.classifyExt(ext);
+  if (kind === 'image') return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported image type "${ext}". Allowed: JPG, PNG, WEBP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+});
+
 /** Wraps multer so failures are returned as clean JSON AND recorded as failed uploads in the audit log. */
 function handle(uploader, field, maxMb) {
   return (req, res, next) => {
@@ -71,6 +78,38 @@ function handle(uploader, field, maxMb) {
   };
 }
 
+function handleArray(uploader, field, maxCount, maxMb) {
+  return (req, res, next) => {
+    uploader.array(field, maxCount)(req, res, (err) => {
+      if (!err) return next();
+      let status = err.status || 400;
+      let code = err.code && typeof err.code === 'string' && !err.code.startsWith('LIMIT_') ? err.code : 'UPLOAD_REJECTED';
+      let message = err.message || 'File upload error.';
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          status = 413;
+          code = 'FILE_TOO_LARGE';
+          message = `File size exceeds the maximum of ${maxMb} MB.`;
+        } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          status = 400;
+          code = 'TOO_MANY_FILES';
+          message = `Cannot upload more than ${maxCount} files at once.`;
+        } else {
+          code = 'UPLOAD_ERROR';
+        }
+      }
+      try {
+        documents.recordUploadFailure({
+          actor: req.user, ownerRef: req.body && req.body.supervisorId, filename: req.pendingFileName || null,
+          categoryRef: req.body && (req.body.categoryId || req.body.category), batchId: req.body && req.body.batchId,
+          code, reason: message, ip: req.socket.remoteAddress,
+        });
+      } catch (_) { /* never mask the real error */ }
+      next(Object.assign(new Error(message), { status, code }));
+    });
+  };
+}
+
 const auth = [requireAuth(), requireRole('supervisor', 'admin')];
 
 router.use(auth);
@@ -80,6 +119,8 @@ router.get('/batches/:id', asyncHandler(c.getBatch));
 router.post('/batches/:id/retry-failed', asyncHandler(c.retryFailedInBatch));
 
 router.post('/upload-book', handle(docUpload, 'bookFile', config.maxFileMb), asyncHandler(c.uploadFile('document')));
+router.post('/book-images', handleArray(imageUpload, 'imageFiles', 100, config.maxFileMb), asyncHandler(c.uploadBookImages));
+router.post('/bulk-images', handleArray(imageUpload, 'imageFiles', 100, config.maxFileMb), asyncHandler(c.uploadBookImages));
 router.post('/media', handle(mediaUpload, 'mediaFile', config.maxMediaMb), asyncHandler(c.uploadFile('media')));
 router.post('/raw-text', asyncHandler(c.rawText));
 router.post('/scrape-url', asyncHandler(c.scrapeUrl));

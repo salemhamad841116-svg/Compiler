@@ -206,6 +206,30 @@ CREATE TRIGGER session_events_no_delete BEFORE DELETE ON session_events
 BEGIN SELECT RAISE(ABORT, 'session_events is append-only'); END;
 `,
   },
+  {
+    id: 2,
+    name: 'phase3_dms_schema',
+    sql: `
+ALTER TABLE categories ADD COLUMN name_key TEXT;
+ALTER TABLE documents ADD COLUMN page_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE documents ADD COLUMN raw_text TEXT;
+
+CREATE TABLE IF NOT EXISTS book_pages (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL,
+  original_filename TEXT NOT NULL,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  vault_path TEXT NOT NULL,
+  ocr_text TEXT,
+  ocr_status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_book_pages_book ON book_pages(book_id, page_number);
+
+UPDATE documents SET page_count = COALESCE(pages_total, pages_processed, 1) WHERE page_count = 0;
+`,
+  },
 ];
 
 function openDb() {

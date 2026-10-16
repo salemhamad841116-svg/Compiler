@@ -5,13 +5,13 @@
 (function () {
   'use strict';
 
-  const { h, t, icon, clear, toast, toastError, field, fmtDateTime, fmtNumber, fmtBytes, fmtRelative, createPanel, chip, emptyBox, errorBox, modal, confirmDialog, describeError } = window.ui;
+  const { h, t, icon, clear, toast, toastError, field, fmtDateTime, fmtNumber, fmtBytes, fmtRelative, createPanel, statCard, chip, emptyBox, errorBox, modal, confirmDialog, describeError } = window.ui;
   const api = window.api;
 
   const authRoot = document.getElementById('authRoot');
   const appRoot = document.getElementById('appRoot');
 
-  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, timers: [], listeners: [] };
+  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, timers: [], listeners: [] };
 
   // ------------------------------------------------------------------ shared lists
   function notifyCategoryConsumers() {
@@ -91,6 +91,94 @@
     panel.reload();
     state.timers.push(setInterval(() => { if (document.visibilityState === 'visible' && root.offsetParent !== null) panel.reload({ silent: true }); }, 15000));
     state.perSupervisor = panel;
+  }
+
+  // ------------------------------------------------------------------ analytics
+  function renderAnalytics(data) {
+    const n = fmtNumber;
+    const cards = [
+      statCard({ iconName: 'book', label: t('adm.total_books'), value: n(data.totalBooks), tone: 'tone-ok' }),
+      statCard({ iconName: 'file-lines', label: t('adm.total_pages_processed'), value: n(data.totalPagesProcessed), tone: 'tone-info' }),
+      statCard({ iconName: 'image', label: t('adm.image_pages_processed'), value: n(data.imagePagesProcessed) }),
+      statCard({ iconName: 'file-lines', label: t('adm.doc_pages_processed'), value: n(data.docPagesProcessed) }),
+    ];
+
+    const supRows = (data.bySupervisor || []).map((s) => h('tr', {},
+      h('td', {}, h('div', { class: 'title-main' }, s.supervisorName), h('small', { class: 'muted', dir: 'ltr' }, s.supervisorEmail)),
+      h('td', {}, n(s.bookCount)),
+      h('td', {}, n(s.pagesProcessed)),
+      h('td', {}, n(s.totalPages))));
+    const supTable = (data.bySupervisor && data.bySupervisor.length)
+      ? h('div', { class: 'table-wrap' },
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, t('adm.col_supervisor')),
+              h('th', {}, t('adm.col_books')),
+              h('th', {}, t('adm.col_pages_processed')),
+              h('th', {}, t('adm.col_total_pages')))),
+            h('tbody', {}, supRows)))
+      : emptyBox('adm.no_supervisors');
+
+    const catRows = (data.byCategory || []).map((c) => {
+      const displayName = c.nameKey && t(c.nameKey) !== c.nameKey ? t(c.nameKey) : c.categoryName;
+      return h('tr', {},
+        h('td', {}, h('span', { class: 'pill' }, displayName)),
+        h('td', {}, n(c.bookCount)),
+        h('td', {}, n(c.pagesProcessed)),
+        h('td', {}, n(c.totalPages)));
+    });
+    const catTable = (data.byCategory && data.byCategory.length)
+      ? h('div', { class: 'table-wrap' },
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, t('adm.col_category')),
+              h('th', {}, t('adm.col_books')),
+              h('th', {}, t('adm.col_pages_processed')),
+              h('th', {}, t('adm.col_total_pages')))),
+            h('tbody', {}, catRows)))
+      : emptyBox('cat.empty');
+
+    const supCatRows = (data.bySupervisorAndCategory || []).map((sc) => {
+      const displayName = sc.nameKey && t(sc.nameKey) !== sc.nameKey ? t(sc.nameKey) : sc.categoryName;
+      return h('tr', {},
+        h('td', {}, sc.supervisorName),
+        h('td', {}, h('span', { class: 'pill' }, displayName)),
+        h('td', {}, n(sc.bookCount)),
+        h('td', {}, n(sc.pagesProcessed)),
+        h('td', {}, n(sc.totalPages)));
+    });
+    const supCatTable = (data.bySupervisorAndCategory && data.bySupervisorAndCategory.length)
+      ? h('div', { class: 'table-wrap' },
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, t('adm.col_supervisor')),
+              h('th', {}, t('adm.col_category')),
+              h('th', {}, t('adm.col_books')),
+              h('th', {}, t('adm.col_pages_processed')),
+              h('th', {}, t('adm.col_total_pages')))),
+            h('tbody', {}, supCatRows)))
+      : emptyBox('docs.empty');
+
+    return h('div', { class: 'form-col' },
+      h('div', { class: 'stats-grid' }, cards),
+      h('div', { class: 'card' }, h('h2', {}, t('adm.by_supervisor')), supTable),
+      h('div', { class: 'card' }, h('h2', {}, t('adm.by_category')), catTable),
+      h('div', { class: 'card' }, h('h2', {}, t('adm.by_supervisor_and_category')), supCatTable));
+  }
+
+  function buildAnalytics(root) {
+    const holder = h('div', {});
+    const panel = createPanel(holder, () => api.get('/api/admin/analytics').then((r) => r.data), renderAnalytics);
+    const header = h('div', { class: 'toolbar' },
+      h('div', {},
+        h('h1', {}, t('adm.analytics_title')),
+        h('p', { class: 'muted' }, t('adm.analytics_desc'))),
+      h('div', { class: 'toolbar-actions' },
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: () => panel.reload() }, icon('rotate-right'), ' ', t('common.refresh'))));
+    root.append(header, holder);
+    panel.reload();
+    state.analyticsPanel = panel;
+    state.timers.push(setInterval(() => { if (document.visibilityState === 'visible' && root.offsetParent !== null) panel.reload({ silent: true }); }, 15000));
   }
 
   // ------------------------------------------------------------------ supervisors
@@ -297,8 +385,9 @@
   // ------------------------------------------------------------------ categories
   function categoryForm(existing) {
     const name = h('input', { class: 'input', value: existing ? existing.name : '', required: true, maxlength: 120 });
+    const nameKey = h('input', { class: 'input', value: existing ? existing.nameKey || '' : '', placeholder: t('cat.name_key_ph'), dir: 'ltr' });
     const desc = h('textarea', { class: 'input', rows: 3 }, existing ? existing.description || '' : '');
-    return { name, desc, body: h('div', { class: 'form-col' }, field(t('cat.name'), name), field(t('cat.description'), desc)) };
+    return { name, nameKey, desc, body: h('div', { class: 'form-col' }, field(t('cat.name'), name), field(t('cat.name_key'), nameKey), field(t('cat.description'), desc)) };
   }
 
   async function afterCategoryChange() {
@@ -314,7 +403,7 @@
       actions: [{ label: t('common.cancel') }, {
         label: t('common.save'), kind: 'primary',
         onClick: async () => {
-          await api.post('/api/categories', { name: f.name.value, description: f.desc.value });
+          await api.post('/api/categories', { name: f.name.value, nameKey: f.nameKey.value.trim() || undefined, description: f.desc.value });
           toast(t('cat.created_ok'), 'success');
           await afterCategoryChange();
         },
@@ -329,7 +418,7 @@
       actions: [{ label: t('common.cancel') }, {
         label: t('common.save'), kind: 'primary',
         onClick: async () => {
-          await api.put(`/api/categories/${c.id}`, { name: f.name.value, description: f.desc.value });
+          await api.put(`/api/categories/${c.id}`, { name: f.name.value, nameKey: f.nameKey.value.trim() || null, description: f.desc.value });
           toast(t('common.saved'), 'success');
           await afterCategoryChange();
         },
@@ -352,7 +441,7 @@
       toast(t('cat.need_other'), 'warn');
       return;
     }
-    const target = h('select', { class: 'input' }, others.map((o) => h('option', { value: o.id }, o.name)));
+    const target = h('select', { class: 'input' }, others.map((o) => h('option', { value: o.id }, o.nameKey ? t(o.nameKey) : o.name)));
     modal({
       title: t('cat.delete_title'),
       body: h('div', { class: 'form-col' }, h('p', {}, t('cat.in_use_msg', { name: c.name, n: fmtNumber(c.documentCount) })), field(t('cat.reassign_to'), target)),
@@ -384,14 +473,17 @@
     }, (list) => {
       if (!list.length) return emptyBox('cat.empty');
       const head = h('tr', {}, ['cat.name', 'cat.description', 'cat.documents', 'cat.created', 'docs.col_actions'].map((k) => h('th', {}, t(k))));
-      const rows = list.map((c) => h('tr', {},
-        h('td', {}, h('div', { class: 'title-main', dir: 'auto' }, c.name)),
-        h('td', { dir: 'auto' }, c.description || '-'),
-        h('td', {}, fmtNumber(c.documentCount)),
-        h('td', { class: 'nowrap' }, fmtDateTime(c.createdAt)),
-        h('td', { class: 'actions' },
-          h('button', { type: 'button', class: 'icon-btn', title: t('docs.act_edit'), 'aria-label': t('docs.act_edit'), onclick: () => editCategory(c) }, icon('pen')),
-          h('button', { type: 'button', class: 'icon-btn danger', title: t('docs.act_delete'), 'aria-label': t('docs.act_delete'), onclick: () => deleteCategory(c) }, icon('trash-can')))));
+      const rows = list.map((c) => {
+        const catLabel = c.nameKey ? t(c.nameKey) : c.name;
+        return h('tr', {},
+          h('td', {}, h('div', { class: 'title-main', dir: 'auto' }, catLabel), c.nameKey ? h('small', { class: 'muted', dir: 'ltr' }, c.name) : null),
+          h('td', { dir: 'auto' }, c.description || '-'),
+          h('td', {}, fmtNumber(c.documentCount)),
+          h('td', { class: 'nowrap' }, fmtDateTime(c.createdAt)),
+          h('td', { class: 'actions' },
+            h('button', { type: 'button', class: 'icon-btn', title: t('docs.act_edit'), 'aria-label': t('docs.act_edit'), onclick: () => editCategory(c) }, icon('pen')),
+            h('button', { type: 'button', class: 'icon-btn danger', title: t('docs.act_delete'), 'aria-label': t('docs.act_delete'), onclick: () => deleteCategory(c) }, icon('trash-can'))));
+      });
       return h('div', { class: 'table-wrap' }, h('table', { class: 'table' }, h('thead', {}, head), h('tbody', {}, rows)));
     });
     state.catPanel.reload();
@@ -507,7 +599,7 @@
     state.timers.forEach(clearInterval);
     state.timers = [];
     if (state.stats && state.stats.stop) state.stats.stop();
-    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, searchCats: null, perSupervisor: null });
+    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null });
     clear(appRoot);
   }
 
@@ -516,6 +608,7 @@
     document.title = t('adm.title');
     const sections = [
       { id: 'overview', labelKey: 'adm.nav_overview', icon: 'gauge-high' },
+      { id: 'analytics', labelKey: 'adm.nav_analytics', icon: 'chart-pie' },
       { id: 'supervisors', labelKey: 'adm.nav_supervisors', icon: 'users-gear' },
       { id: 'presence', labelKey: 'adm.nav_presence', icon: 'signal' },
       { id: 'categories', labelKey: 'adm.nav_categories', icon: 'tags' },
@@ -532,6 +625,7 @@
         if (id === 'documents' || id === 'upload' || id === 'activity') { loadCategories(); loadSupervisors(); }
         if (!first) {
           if (id === 'overview' && state.stats) { state.stats.reload({ silent: true }); state.perSupervisor.reload({ silent: true }); }
+          if (id === 'analytics' && state.analyticsPanel) state.analyticsPanel.reload({ silent: true });
           if (id === 'documents' && state.docs) state.docs.reload({ silent: true });
           if (id === 'activity' && state.activity) state.activity.reload();
           if (id === 'supervisors' && state.supPanel) state.supPanel.reload({ silent: true });
@@ -548,13 +642,17 @@
     loadSupervisors();
 
     buildOverview(S.overview);
+    buildAnalytics(S.analytics);
     buildSupervisors(S.supervisors);
     buildPresence(S.presence);
     buildCategories(S.categories);
 
     state.docs = window.Widgets.mountDocuments(S.documents, {
       admin: true, getCategories: () => state.categories, getSupervisors: () => state.supervisors,
-      onChanged: () => { if (state.stats) state.stats.reload({ silent: true }); },
+      onChanged: () => {
+        if (state.stats) state.stats.reload({ silent: true });
+        if (state.analyticsPanel) state.analyticsPanel.reload({ silent: true });
+      },
     });
 
     const upHost = h('div', {});
@@ -565,6 +663,7 @@
       getSupervisors: () => state.supervisors.filter((s) => s.status === 'active'),
       onChanged: () => {
         if (state.stats) state.stats.reload({ silent: true });
+        if (state.analyticsPanel) state.analyticsPanel.reload({ silent: true });
         if (state.docs) state.docs.reload({ silent: true });
         if (state.activity) state.activity.reload();
         if (state.perSupervisor) state.perSupervisor.reload({ silent: true });

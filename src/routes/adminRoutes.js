@@ -56,6 +56,13 @@ router.get(
   })
 );
 
+router.get(
+  '/analytics',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: stats.ingestionAnalytics() });
+  })
+);
+
 // ----------------------------------------------------------- accounts
 router.get(
   '/users',

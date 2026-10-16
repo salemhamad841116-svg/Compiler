@@ -30,7 +30,15 @@ function mapDocument(d, { withOwner = true } = {}) {
   if (!d) return null;
   const owner = withOwner && d.owner_id ? get('SELECT id, name, email, role FROM users WHERE id = ?', d.owner_id) : null;
   const actor = withOwner && d.actor_id && d.actor_id !== d.owner_id ? get('SELECT id, name, email, role FROM users WHERE id = ?', d.actor_id) : owner;
-  const cat = d.category_id ? get('SELECT id, name FROM categories WHERE id = ?', d.category_id) : null;
+  const cat = d.category_id ? get('SELECT id, name, name_key FROM categories WHERE id = ?', d.category_id) : null;
+  const bookPages = all('SELECT id, page_number, original_filename, file_size, ocr_status, created_at FROM book_pages WHERE book_id = ? ORDER BY page_number', d.id).map((p) => ({
+    id: p.id,
+    pageNumber: p.page_number,
+    originalFilename: p.original_filename,
+    fileSize: p.file_size,
+    ocrStatus: p.ocr_status,
+    createdAt: p.created_at,
+  }));
   return {
     id: d.id,
     batchId: d.batch_id,
@@ -40,7 +48,7 @@ function mapDocument(d, { withOwner = true } = {}) {
     fileType: d.file_type,
     mimeType: d.mime_type,
     sizeBytes: d.size_bytes,
-    category: cat ? { id: cat.id, name: cat.name } : null,
+    category: cat ? { id: cat.id, name: cat.name, nameKey: cat.name_key || null } : null,
     language: d.language,
     owner: owner || (d.legacy_uploader ? { id: null, name: null, email: d.legacy_uploader, unverified: true } : null),
     actor: actor || null,
@@ -48,6 +56,9 @@ function mapDocument(d, { withOwner = true } = {}) {
     statuses: { upload: d.upload_status, ocr: d.ocr_status, index: d.index_status },
     pipelineStatus: pipelineStatus(d),
     pages: { kind: d.pages_kind, total: d.pages_total, processed: d.pages_processed, failed: d.pages_failed, estimated: d.pages_estimated },
+    pageCount: d.page_count != null ? d.page_count : (d.pages_total || d.pages_processed || 0),
+    rawText: d.raw_text || null,
+    bookPages: bookPages.length ? bookPages : undefined,
     chunkCount: d.chunk_count,
     charCount: d.char_count,
     failureCode: d.failure_code,
@@ -251,12 +262,117 @@ async function storeUploadedFile({ file, body, actor, ip }) {
     upload_status: 'stored', ocr_status: kind === 'image' || kind === 'media' ? 'pending' : 'not_applicable',
     index_status: 'pending',
     pages_kind: ext === '.pdf' ? 'pdf' : kind === 'image' ? 'image' : 'estimated',
+    page_count: ext === '.pdf' ? 0 : 1,
     source: 'upload', attribution: 'verified', uploaded_at: nowIso(),
   });
   audit.record({
     action: 'document.uploaded', actor, supervisor: owner, doc, ip, uploadStatus: 'stored',
     detail: { onBehalf: owner.id !== actor.id, sha256: saved.sha256 },
   });
+  return doc;
+}
+
+/** Persists multiple images as a single Book entity with child book_pages. */
+async function storeBookImages({ files, body, actor, ip }) {
+  if (!files || !files.length) {
+    throw new AppError(400, 'NO_FILES', 'At least one image file is required.');
+  }
+  const owner = resolveOwner(actor, body.supervisorId);
+  const cleanup = () => files.forEach((f) => storage.removeTemp(f.path));
+  const fail = (status, code, message) => {
+    cleanup();
+    recordUploadFailure({
+      actor, ownerRef: body.supervisorId, filename: files[0].originalname,
+      sizeBytes: files.reduce((acc, f) => acc + f.size, 0),
+      categoryRef: body.categoryId || body.category, batchId: body.batchId,
+      code, reason: message, ip, kind: 'image', fileType: 'images',
+    });
+    throw new AppError(status, code, message);
+  };
+
+  for (const f of files) {
+    const ext = path.extname(f.originalname).toLowerCase();
+    if (!IMAGE_EXTS.includes(ext)) {
+      fail(400, 'UNSUPPORTED_FILE_TYPE', `File "${f.originalname}" is not an allowed image format (JPG, PNG, WEBP).`);
+    }
+    if (!f.size) fail(422, 'EMPTY_FILE', `The file "${f.originalname}" is empty.`);
+  }
+
+  let category;
+  let batchId;
+  try {
+    category = resolveCategoryOrThrow(body.categoryId || body.category);
+    batchId = resolveBatch(body.batchId, actor, owner);
+  } catch (e) {
+    fail(e.status || 400, e.code || 'INVALID_REQUEST', e.message);
+  }
+
+  const id = newId('doc');
+  const bookTitle = body.title && String(body.title).trim() ? String(body.title).trim() : null;
+  const displayTitle = bookTitle || files[0].originalname.replace(/\.[^/.]+$/, '');
+  const savedPages = [];
+  let totalBytes = 0;
+
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const pageNumber = i + 1;
+      const saved = await storage.saveFile(f.path, `${id}_p${pageNumber}`, f.originalname);
+      savedPages.push({ pageNumber, file: f, saved });
+      totalBytes += saved.size;
+    }
+  } catch (e) {
+    fail(500, 'STORAGE_FAILED', `Could not save image files to the Data Vault: ${e.message}`);
+  }
+
+  const firstSaved = savedPages[0].saved;
+  const doc = insertDocument({
+    id,
+    batch_id: batchId,
+    owner_id: owner.id,
+    actor_id: actor.id,
+    title: displayTitle,
+    original_filename: files[0].originalname,
+    kind: 'image',
+    file_type: 'images',
+    mime_type: files[0].mimetype || 'image/jpeg',
+    size_bytes: totalBytes,
+    sha256: firstSaved.sha256,
+    category_id: category.id,
+    language: String(body.language || 'Arabic').trim() || 'Arabic',
+    vault_path: firstSaved.relPath,
+    storage_reference: firstSaved.storageReference,
+    upload_status: 'stored',
+    ocr_status: 'pending',
+    index_status: 'pending',
+    pages_kind: 'image',
+    page_count: files.length,
+    pages_total: files.length,
+    pages_processed: 0,
+    pages_failed: 0,
+    source: 'upload',
+    attribution: 'verified',
+    uploaded_at: nowIso(),
+  });
+
+  for (const sp of savedPages) {
+    run(
+      `INSERT INTO book_pages (id, book_id, page_number, original_filename, file_size, vault_path, ocr_status, created_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      newId('pg'), id, sp.pageNumber, sp.file.originalname, sp.saved.size, sp.saved.relPath, 'pending', nowIso()
+    );
+  }
+
+  audit.record({
+    action: 'document.uploaded',
+    actor,
+    supervisor: owner,
+    doc,
+    ip,
+    uploadStatus: 'stored',
+    detail: { onBehalf: owner.id !== actor.id, pagesCount: files.length },
+  });
+
   return doc;
 }
 
@@ -285,6 +401,7 @@ async function storeRawText({ title, textContent, body, actor, ip }) {
     size_bytes: saved.size, sha256: saved.sha256, category_id: category.id,
     language: String(body.language || 'Arabic').trim() || 'Arabic', vault_path: saved.relPath, storage_reference: saved.storageReference,
     upload_status: 'stored', ocr_status: 'not_applicable', index_status: 'pending', pages_kind: 'estimated',
+    page_count: 1, raw_text: text,
     source: 'upload', attribution: 'verified', uploaded_at: nowIso(),
   });
   audit.record({ action: 'document.uploaded', actor, supervisor: owner, doc, ip, uploadStatus: 'stored', detail: { onBehalf: owner.id !== actor.id } });
@@ -374,6 +491,6 @@ function deleteDocument(id, actor) {
 module.exports = {
   classifyExt, pipelineStatus, mapDocument, getDocumentRow, getAuthorizedDocument, listDocuments,
   createBatch, batchSummary, resolveOwner, resolveCategoryOrThrow, recordUploadFailure,
-  storeUploadedFile, storeRawText, storeScrapedUrl, updateDocument, deleteDocument,
+  storeUploadedFile, storeBookImages, storeRawText, storeScrapedUrl, updateDocument, deleteDocument,
   DOC_EXTS, IMAGE_EXTS, MEDIA_EXTS,
 };

@@ -109,4 +109,102 @@ function perSupervisor() {
   return { items: rows, unattributedDocuments: unattributed };
 }
 
-module.exports = { overview, perSupervisor };
+function ingestionAnalytics() {
+  const n = (v) => Number(v || 0);
+
+  const booksRow = get('SELECT COUNT(*) AS total_books FROM documents');
+  const totalBooks = n(booksRow && booksRow.total_books);
+
+  const pagesRow = get(`
+    SELECT
+      COALESCE(SUM(CASE WHEN index_status = 'completed' THEN COALESCE(page_count, pages_processed, 1) ELSE 0 END), 0) AS total_pages_processed,
+      COALESCE(SUM(CASE WHEN kind = 'image' AND index_status = 'completed' THEN COALESCE(page_count, pages_processed, 1) ELSE 0 END), 0) AS image_pages_processed,
+      COALESCE(SUM(CASE WHEN kind = 'document' AND index_status = 'completed' THEN COALESCE(page_count, pages_processed, 1) ELSE 0 END), 0) AS doc_pages_processed
+    FROM documents
+  `);
+  const totalPagesProcessed = n(pagesRow && pagesRow.total_pages_processed);
+  const imagePagesProcessed = n(pagesRow && pagesRow.image_pages_processed);
+  const docPagesProcessed = n(pagesRow && pagesRow.doc_pages_processed);
+
+  const bySupervisor = all(`
+    SELECT
+      u.id AS supervisor_id,
+      u.name AS supervisor_name,
+      u.email AS supervisor_email,
+      COUNT(d.id) AS book_count,
+      COALESCE(SUM(CASE WHEN d.index_status = 'completed' THEN COALESCE(d.page_count, d.pages_processed, 1) ELSE 0 END), 0) AS pages_processed,
+      COALESCE(SUM(COALESCE(d.page_count, d.pages_total, 1)), 0) AS total_pages
+    FROM users u
+    LEFT JOIN documents d ON d.owner_id = u.id
+    WHERE u.role = 'supervisor' OR d.id IS NOT NULL
+    GROUP BY u.id
+    ORDER BY book_count DESC, u.name COLLATE NOCASE
+  `).map((r) => ({
+    supervisorId: r.supervisor_id,
+    supervisorName: r.supervisor_name,
+    supervisorEmail: r.supervisor_email,
+    bookCount: n(r.book_count),
+    pagesProcessed: n(r.pages_processed),
+    totalPages: n(r.total_pages),
+  }));
+
+  const byCategory = all(`
+    SELECT
+      c.id AS category_id,
+      c.name AS category_name,
+      c.name_key,
+      COUNT(d.id) AS book_count,
+      COALESCE(SUM(CASE WHEN d.index_status = 'completed' THEN COALESCE(d.page_count, d.pages_processed, 1) ELSE 0 END), 0) AS pages_processed,
+      COALESCE(SUM(COALESCE(d.page_count, d.pages_total, 1)), 0) AS total_pages
+    FROM categories c
+    LEFT JOIN documents d ON d.category_id = c.id
+    GROUP BY c.id
+    ORDER BY book_count DESC, c.name COLLATE NOCASE
+  `).map((r) => ({
+    categoryId: r.category_id,
+    categoryName: r.category_name,
+    nameKey: r.name_key || null,
+    bookCount: n(r.book_count),
+    pagesProcessed: n(r.pages_processed),
+    totalPages: n(r.total_pages),
+  }));
+
+  const bySupervisorAndCategory = all(`
+    SELECT
+      COALESCE(u.id, 'unattributed') AS supervisor_id,
+      COALESCE(u.name, 'Unattributed') AS supervisor_name,
+      c.id AS category_id,
+      c.name AS category_name,
+      c.name_key,
+      COUNT(d.id) AS book_count,
+      COALESCE(SUM(CASE WHEN d.index_status = 'completed' THEN COALESCE(d.page_count, d.pages_processed, 1) ELSE 0 END), 0) AS pages_processed,
+      COALESCE(SUM(COALESCE(d.page_count, d.pages_total, 1)), 0) AS total_pages
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.owner_id
+    JOIN categories c ON c.id = d.category_id
+    GROUP BY d.owner_id, d.category_id
+    ORDER BY book_count DESC, supervisor_name COLLATE NOCASE, category_name COLLATE NOCASE
+  `).map((r) => ({
+    supervisorId: r.supervisor_id,
+    supervisorName: r.supervisor_name,
+    categoryId: r.category_id,
+    categoryName: r.category_name,
+    nameKey: r.name_key || null,
+    bookCount: n(r.book_count),
+    pagesProcessed: n(r.pages_processed),
+    totalPages: n(r.total_pages),
+  }));
+
+  return {
+    generatedAt: nowIso(),
+    totalBooks,
+    totalPagesProcessed,
+    imagePagesProcessed,
+    docPagesProcessed,
+    bySupervisor,
+    byCategory,
+    bySupervisorAndCategory,
+  };
+}
+
+module.exports = { overview, perSupervisor, ingestionAnalytics };

@@ -53,7 +53,10 @@
       const prev = sel.value;
       clear(sel);
       const cats = this.opts.getCategories();
-      cats.forEach((c) => sel.appendChild(h('option', { value: c.id }, c.name)));
+      cats.forEach((c) => {
+        const label = c.nameKey ? t(c.nameKey) : c.name;
+        sel.appendChild(h('option', { value: c.id }, label));
+      });
       if (prev && cats.some((c) => c.id === prev)) sel.value = prev;
     }
 
@@ -87,11 +90,16 @@
       });
     }
 
-    metaFields(ctx) {
+    metaFields(ctx, { withTitle = false } = {}) {
       ctx.category = this.categorySelect();
       ctx.language = this.languageSelect();
       ctx.supervisor = this.supervisorSelect();
-      const row = [field(t('up.category'), ctx.category), field(t('up.language'), ctx.language)];
+      const row = [];
+      if (withTitle) {
+        ctx.title = h('input', { class: 'input', placeholder: t('up.book_title_optional'), maxlength: '200' });
+        row.push(field(t('up.book_title_optional'), ctx.title));
+      }
+      row.push(field(t('up.category'), ctx.category), field(t('up.language'), ctx.language));
       if (ctx.supervisor) row.push(field(t('up.supervisor_owner'), ctx.supervisor));
       return h('div', { class: 'form-row' }, row);
     }
@@ -100,8 +108,9 @@
     render() {
       clear(this.root);
       const tabs = [
+        ['book_images', 'up.bulk_images_title', 'images'],
+        ['text', 'up.direct_text_title', 'paste'],
         ['files', 'up.tab_files', 'file-circle-plus'],
-        ['text', 'up.tab_text', 'paste'],
         ['media', 'up.tab_media', 'microphone-lines'],
         ['url', 'up.tab_url', 'globe'],
       ];
@@ -113,8 +122,9 @@
         tabBar.appendChild(btn);
       });
       this.root.appendChild(tabBar);
-      this.panes.files = this.buildFilesPane();
+      this.panes.book_images = this.buildBookImagesPane();
       this.panes.text = this.buildTextPane();
+      this.panes.files = this.buildFilesPane();
       this.panes.media = this.buildMediaPane();
       this.panes.url = this.buildUrlPane();
       Object.entries(this.panes).forEach(([id, el]) => {
@@ -405,9 +415,94 @@
       }
     }
 
+    buildBookImagesPane() {
+      const ctx = {};
+      const title = h('input', { class: 'input', placeholder: t('up.book_title_optional'), maxlength: '200' });
+      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.jpg,.jpeg,.png,.webp' });
+      const drop = h('div', { class: 'dropzone', tabindex: '0', role: 'button', onclick: () => input.click(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); } },
+        icon('images'), h('div', { class: 'dropzone-title' }, t('up.select_images')), h('div', { class: 'dropzone-hint' }, t('up.bulk_images_desc')));
+      ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+      ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+
+      let selectedFiles = [];
+      const countPill = h('div', { class: 'batch-summary', hidden: true });
+      const pagesList = h('div', { class: 'queue-list' });
+      const progress = h('div', { class: 'row-progress', hidden: true }, h('div', { class: 'row-progress-fill' }));
+      const btn = this.submitButton(t('up.submit_book_images'), 'cloud-arrow-up');
+      btn.disabled = true;
+
+      const updateList = () => {
+        clear(pagesList);
+        countPill.hidden = !selectedFiles.length;
+        btn.disabled = !selectedFiles.length;
+        if (!selectedFiles.length) return;
+        clear(countPill);
+        countPill.appendChild(h('span', { class: 'pill ok' }, t('up.images_selected', { n: fmtNumber(selectedFiles.length), pages: fmtNumber(selectedFiles.length) })));
+        selectedFiles.forEach((file, idx) => {
+          const pageRow = h('div', { class: 'queue-row' },
+            h('div', { class: 'row-main' },
+              h('span', { class: 'chip chip-info' }, `${idx + 1}`),
+              h('span', { class: 'row-name', dir: 'auto' }, file.name),
+              h('span', { class: 'row-size' }, fmtBytes(file.size))
+            ),
+            h('button', {
+              type: 'button', class: 'icon-btn danger', title: t('docs.act_delete'), 'aria-label': t('docs.act_delete'),
+              onclick: () => {
+                selectedFiles.splice(idx, 1);
+                updateList();
+              },
+            }, icon('trash-can'))
+          );
+          pagesList.appendChild(pageRow);
+        });
+      };
+
+      const handleFiles = (fl) => {
+        const incoming = Array.from(fl || []).filter((f) => {
+          const ext = extOf(f.name);
+          return ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
+        });
+        if (!incoming.length) return toast(t('up.unsupported', { ext: 'all' }), 'warn');
+        selectedFiles = selectedFiles.concat(incoming);
+        updateList();
+      };
+
+      drop.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+      input.addEventListener('change', () => { handleFiles(input.files); input.value = ''; });
+
+      const form = h('form', {
+        class: 'card',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          if (!selectedFiles.length) return toast(t('up.nothing_to_upload'), 'warn');
+          if (!ctx.category.value) return toast(t('up.pick_category'), 'warn');
+          const fd = new FormData();
+          selectedFiles.forEach((f) => fd.append('imageFiles', f, f.name));
+          if (title.value.trim()) fd.append('title', title.value.trim());
+          fd.append('categoryId', ctx.category.value);
+          fd.append('language', ctx.language.value);
+          Object.entries(this.ownerParams(ctx)).forEach(([k, v]) => fd.append(k, v));
+          progress.hidden = false;
+          await this.runSimple(btn, () => api.upload('/api/ingestion/book-images', fd, {
+            onProgress: (p) => { progress.firstChild.style.width = `${Math.round(p * 100)}%`; },
+          }), () => {
+            title.value = '';
+            selectedFiles = [];
+            updateList();
+          }).finally(() => { progress.hidden = true; });
+        },
+      },
+      h('p', { class: 'card-desc' }, t('up.bulk_images_desc')),
+      field(t('up.book_title_optional'), title),
+      this.metaFields(ctx),
+      drop, input, countPill, pagesList, progress, btn);
+
+      return form;
+    }
+
     buildTextPane() {
       const ctx = {};
-      const title = h('input', { class: 'input', required: true, maxlength: '200' });
+      const title = h('input', { class: 'input', placeholder: t('up.book_title_optional'), maxlength: '200' });
       const text = h('textarea', { class: 'input', rows: '9', required: true });
       const counter = h('small', { class: 'field-hint' }, t('up.chars', { n: 0 }));
       text.addEventListener('input', () => { counter.textContent = t('up.chars', { n: fmtNumber(text.value.length) }); });
@@ -418,7 +513,7 @@
           e.preventDefault();
           this.runSimple(btn, () => api.post('/api/ingestion/raw-text', { title: title.value, textContent: text.value, categoryId: ctx.category.value, language: ctx.language.value, ...this.ownerParams(ctx) }), () => { title.value = ''; text.value = ''; counter.textContent = t('up.chars', { n: 0 }); });
         },
-      }, h('p', { class: 'card-desc' }, t('up.text_desc')), field(t('up.title'), title), this.metaFields(ctx), field(t('up.content'), text, null), counter, btn);
+      }, h('p', { class: 'card-desc' }, t('up.direct_text_desc')), field(t('up.book_title_optional'), title), this.metaFields(ctx), field(t('up.content'), text, null), counter, btn);
       return form;
     }
 

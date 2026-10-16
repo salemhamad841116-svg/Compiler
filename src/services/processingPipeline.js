@@ -1,6 +1,6 @@
 const fs = require('fs');
 const config = require('../config');
-const { get, run, tx } = require('../db/database');
+const { get, all, run, tx } = require('../db/database');
 const { newId } = require('../utils/ids');
 const { nowIso } = require('../utils/clock');
 const { chunkDocumentText, calculateEstimatedPages } = require('../utils/textChunker');
@@ -44,7 +44,7 @@ async function extract(doc, abs) {
   const chunkSize = parseInt(process.env.MAX_CHUNK_SIZE, 10) || 800;
   const overlap = parseInt(process.env.CHUNK_OVERLAP, 10) || 150;
   const sections = []; // { page, text }
-  const info = { pagesTotal: null, pagesProcessed: 0, pagesFailed: 0, pagesEstimated: null, charCount: 0 };
+  const info = { pagesTotal: null, pagesProcessed: 0, pagesFailed: 0, pagesEstimated: null, charCount: 0, rawText: null };
 
   if (doc.kind === 'document' && doc.file_type === 'pdf') {
     let parsed;
@@ -69,24 +69,63 @@ async function extract(doc, abs) {
     sections.push({ page: null, text });
     info.pagesEstimated = calculateEstimatedPages(text);
     info.charCount = text.length;
+    info.rawText = text;
   } else if (doc.kind === 'raw_text' || doc.kind === 'url') {
     const text = fs.readFileSync(abs, 'utf-8').trim();
     if (!text) throw new PipelineError('NO_TEXT', 'The entry contains no text.', 'extract', false);
     sections.push({ page: null, text });
     info.pagesEstimated = calculateEstimatedPages(text);
     info.charCount = text.length;
+    info.rawText = text;
   } else if (doc.kind === 'image') {
     run("UPDATE documents SET ocr_status = 'processing' WHERE id = ?", doc.id);
-    let text;
-    try {
-      text = await provider().ocrImage(abs, doc.original_filename || '');
-    } catch (e) {
-      const err = classifyError(e);
-      throw new PipelineError(err.code, err.message, 'ocr', err.retryable);
+    const bookPages = all('SELECT * FROM book_pages WHERE book_id = ? ORDER BY page_number', doc.id);
+    if (bookPages.length > 0) {
+      info.pagesTotal = bookPages.length;
+      let totalText = '';
+      for (const pg of bookPages) {
+        const pageAbs = storage.resolve(pg.vault_path);
+        if (!pageAbs || !fs.existsSync(pageAbs)) {
+          run("UPDATE book_pages SET ocr_status = 'failed' WHERE id = ?", pg.id);
+          info.pagesFailed++;
+          continue;
+        }
+        let text;
+        try {
+          text = await provider().ocrImage(pageAbs, pg.original_filename || '');
+        } catch (e) {
+          const err = classifyError(e);
+          run("UPDATE book_pages SET ocr_status = 'failed' WHERE id = ?", pg.id);
+          throw new PipelineError(err.code, err.message, 'ocr', err.retryable);
+        }
+        if (text && text.trim()) {
+          run("UPDATE book_pages SET ocr_text = ?, ocr_status = 'completed' WHERE id = ?", text.trim(), pg.id);
+          sections.push({ page: pg.page_number, text: text.trim() });
+          totalText += (totalText ? '\n\n' : '') + text.trim();
+          info.pagesProcessed++;
+        } else {
+          run("UPDATE book_pages SET ocr_status = 'empty' WHERE id = ?", pg.id);
+          info.pagesFailed++;
+        }
+      }
+      if (!sections.length) throw new PipelineError('OCR_EMPTY', 'OCR returned no text for the uploaded book images.', 'ocr', false);
+      info.charCount = totalText.length;
+      info.rawText = totalText;
+    } else {
+      let text;
+      try {
+        text = await provider().ocrImage(abs, doc.original_filename || '');
+      } catch (e) {
+        const err = classifyError(e);
+        throw new PipelineError(err.code, err.message, 'ocr', err.retryable);
+      }
+      if (!text || !text.trim()) throw new PipelineError('OCR_EMPTY', 'OCR returned no text for this image.', 'ocr', false);
+      sections.push({ page: 1, text: text.trim() });
+      info.pagesTotal = 1;
+      info.pagesProcessed = 1;
+      info.charCount = text.trim().length;
+      info.rawText = text.trim();
     }
-    if (!text || !text.trim()) throw new PipelineError('OCR_EMPTY', 'OCR returned no text for this image.', 'ocr', false);
-    sections.push({ page: 1, text: text.trim() });
-    info.charCount = text.trim().length;
   } else if (doc.kind === 'media') {
     run("UPDATE documents SET ocr_status = 'processing' WHERE id = ?", doc.id);
     let text;
@@ -149,12 +188,14 @@ async function processDocument(documentId) {
       embedded.forEach((c, idx) => {
         run('INSERT INTO chunks (id, document_id, idx, page, text, embedding, created_at) VALUES (?,?,?,?,?,?,?)', newId('chk'), documentId, idx, c.page, c.text, c.blob, completedAt);
       });
+      const resolvedPageCount = info.pagesTotal || (info.pagesProcessed > 0 ? info.pagesProcessed : (doc.page_count || 1));
+      const resolvedRawText = info.rawText || (doc.raw_text || null);
       run(
         `UPDATE documents SET index_status = 'completed', ocr_status = ?, pages_total = ?, pages_processed = ?, pages_failed = ?,
-           pages_estimated = ?, chunk_count = ?, char_count = ?, completed_at = ?, failure_code = NULL, failure_reason = NULL,
+           pages_estimated = ?, page_count = ?, raw_text = COALESCE(?, raw_text), chunk_count = ?, char_count = ?, completed_at = ?, failure_code = NULL, failure_reason = NULL,
            lifetime_counted = 1 WHERE id = ?`,
         needsExtractionStage ? 'completed' : 'not_applicable', info.pagesTotal, info.pagesProcessed, info.pagesFailed,
-        info.pagesEstimated, embedded.length, info.charCount, completedAt, documentId
+        info.pagesEstimated, resolvedPageCount, resolvedRawText, embedded.length, info.charCount, completedAt, documentId
       );
     });
     require('../models/vectorDbModel').invalidateCache();
