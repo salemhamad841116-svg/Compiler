@@ -123,6 +123,26 @@ function createApp() {
 
 let background = [];
 
+/** Prints the effective (non-secret) AI configuration once at startup so misconfiguration is visible in `docker logs`. */
+function logAiConfiguration() {
+  try {
+    const envFile = path.join(__dirname, '../.env');
+    console.log('[AI] ----------------------------------------------------------');
+    console.log(`[AI] provider=${config.aiProvider}  .env file inside container: ${fs.existsSync(envFile) ? 'present' : 'absent (variables must come from docker env_file/environment)'}`);
+    if (config.aiProvider === 'mock') {
+      console.log('[AI] MOCK provider active (tests only) - no real OCR/embeddings.');
+    } else {
+      const d = require('./services/geminiClient').describeConfig();
+      console.log(`[AI] GEMINI_API_KEY: ${d.keyPresent ? d.keyMasked : 'MISSING'}${d.keyPresent && !d.keyUsable ? '  <-- PLACEHOLDER VALUE, every upload will fail with AI_NOT_CONFIGURED' : ''}`);
+      console.log(`[AI] models: ocr=${d.ocrModel} chat=${d.generationModel} transcribe=${d.transcriptionModel} embedding=${d.embeddingModel} (${d.embeddingDimensions} dims)`);
+      if (!d.keyUsable) console.error('[AI] ERROR: no usable GEMINI_API_KEY. Put it in .env.production or .env next to docker-compose.prod.yml and recreate the container.');
+    }
+    console.log('[AI] ----------------------------------------------------------');
+  } catch (e) {
+    console.error('[AI] Could not describe AI configuration:', e);
+  }
+}
+
 function startBackground() {
   const authService = require('./auth/authService');
   const jobQueue = require('./services/jobQueue');
@@ -136,6 +156,7 @@ function startBackground() {
     console.error('[Startup] Legacy data import failed (service continues):', e);
   }
   authService.bootstrapAdmin();
+  logAiConfiguration();
   jobQueue.start();
   const t1 = setInterval(() => {
     try {

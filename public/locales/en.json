@@ -596,7 +596,10 @@
     "search_run": "Search",
     "search_empty": "No results above the similarity threshold.",
     "similarity": "Match {n}%",
-    "page_n": "Page {n}"
+    "page_n": "Page {n}",
+    "retry_all_failed": "Retry all failed files",
+    "retry_all_failed_msg": "Re-queue every file whose processing failed (files still stored in the vault). Use this after fixing the AI key or model settings.",
+    "retry_all_done": "{queued} file(s) re-queued for processing, {skipped} skipped."
   },
   "errors": {
     "UNKNOWN": "Something went wrong.",

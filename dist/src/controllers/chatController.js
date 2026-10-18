@@ -29,7 +29,7 @@ async function handleUserChatQuery(req, res) {
 
   let relevantChunks;
   try {
-    const queryEmbedding = await provider().embed(trimmedQuestion);
+    const queryEmbedding = await provider().embed(trimmedQuestion, { taskType: 'RETRIEVAL_QUERY' });
     relevantChunks = await searchVectorDatabase(queryEmbedding, limit, threshold, filterOptions);
   } catch (error) {
     const c = classifyError(error);

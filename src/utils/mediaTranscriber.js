@@ -1,9 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+const { generateText } = require('../services/geminiClient');
 
 /**
  * Maps file extension to standard MIME types for Gemini multimodal API.
@@ -31,33 +28,7 @@ function getMediaMimeType(filePath) {
   }
 }
 
-/**
- * Transcribes spoken words from a video or audio file using Gemini's native multimodal audio engine.
- *
- * @param {string} filePath - Absolute path to the media file on disk.
- * @returns {Promise<string>} Full verbatim textual transcript.
- */
-async function transcribeMediaFile(filePath) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not configured in environment variables.');
-  }
-
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Media file not found at path: ${filePath}`);
-  }
-
-  const client = genAI || new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  // Use Gemini 1.5 Flash for high-speed, accurate speech-to-text
-  const modelName = process.env.TRANSCRIPTION_MODEL || 'gemini-1.5-flash';
-  const model = client.getGenerativeModel({ model: modelName });
-
-  const mimeType = getMediaMimeType(filePath);
-  const mediaBuffer = fs.readFileSync(filePath);
-  const base64Data = mediaBuffer.toString('base64');
-
-  console.log(`[Transcriber] Sending media (${(mediaBuffer.length / (1024 * 1024)).toFixed(2)} MB, ${mimeType}) to Gemini multimodal engine...`);
-
-  const prompt = `
+const TRANSCRIBE_PROMPT = `
 You are a master-level speech-to-text audio transcriber.
 
 TASK:
@@ -65,23 +36,32 @@ TASK:
 2. Transcribe ALL spoken words verbatim with high fidelity and punctuation.
 3. Preserve all explanations, examples, and terminology exactly as spoken.
 4. Do NOT summarize, critique, or add commentary. Return ONLY the complete transcription text.
-`;
+`.trim();
 
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        mimeType,
-        data: base64Data,
-      },
-    },
-    { text: prompt },
-  ]);
-
-  const transcript = result.response.text().trim();
-
-  if (!transcript || transcript.length === 0) {
-    throw new Error('Transcription yielded no spoken text from the media file.');
+/**
+ * Transcribes spoken words from a video or audio file using Gemini's native multimodal audio engine
+ * (TRANSCRIPTION_MODEL, falling back to GEMINI_MODEL, then the client default).
+ *
+ * @param {string} filePath - Absolute path to the media file on disk.
+ * @returns {Promise<string>} Full verbatim textual transcript.
+ */
+async function transcribeMediaFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Media file not found at path: ${filePath}`);
   }
+
+  const mimeType = getMediaMimeType(filePath);
+  const mediaBuffer = fs.readFileSync(filePath);
+
+  console.log(`[Transcriber] Sending media ${path.basename(filePath)} (${(mediaBuffer.length / (1024 * 1024)).toFixed(2)} MB, ${mimeType}) to Gemini...`);
+
+  const transcript = await generateText({
+    purpose: 'transcribe',
+    modelEnv: 'TRANSCRIPTION_MODEL',
+    parts: [{ inlineData: { mimeType, data: mediaBuffer.toString('base64') } }, { text: TRANSCRIBE_PROMPT }],
+    generationConfig: { temperature: 0, maxOutputTokens: 32768 },
+    timeoutMs: 300000,
+  });
 
   console.log(`[Transcriber] Successfully transcribed media (${transcript.length} characters).`);
   return transcript;

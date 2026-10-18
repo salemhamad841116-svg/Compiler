@@ -1,9 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+const { generateText } = require('../services/geminiClient');
 
 /**
  * Maps image file extension to valid MIME type.
@@ -22,38 +19,16 @@ function getImageMimeType(filePath) {
       return 'image/webp';
     case '.gif':
       return 'image/gif';
+    case '.heic':
+      return 'image/heic';
+    case '.heif':
+      return 'image/heif';
     default:
       return 'image/jpeg';
   }
 }
 
-/**
- * Extracts verbatim text and semantic content from an image using Gemini 1.5 Flash multimodal vision.
- * Supports both Arabic and English printed and handwritten text, tables, and diagrams.
- *
- * @param {string} filePath - Absolute path to the image file.
- * @returns {Promise<string>} Extracted OCR text or semantic visual description.
- */
-async function extractTextFromImage(filePath) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not configured in environment variables.');
-  }
-
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Image file not found at path: ${filePath}`);
-  }
-
-  const client = genAI || new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const modelName = process.env.OCR_MODEL || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-  const model = client.getGenerativeModel({ model: modelName });
-
-  const mimeType = getImageMimeType(filePath);
-  const fileBuffer = fs.readFileSync(filePath);
-  const base64Data = fileBuffer.toString('base64');
-
-  console.log(`[ImageOCR] Processing image (${(fileBuffer.length / 1024).toFixed(1)} KB, ${mimeType}) with Gemini vision model (${modelName})...`);
-
-  const prompt = `
+const OCR_PROMPT = `
 You are an expert OCR and document analysis engine specialized in Arabic and English document transcription.
 
 TASK:
@@ -64,23 +39,32 @@ TASK:
 5. Return ONLY the transcribed text and/or descriptive content. Do NOT wrap output in markdown code fences (like \`\`\`), and do not include commentary or greetings.
 `.trim();
 
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        mimeType,
-        data: base64Data,
-      },
-    },
-    { text: prompt },
-  ]);
-
-  const extractedText = result.response.text().trim();
-
-  if (!extractedText || extractedText.length === 0) {
-    throw new Error('Image OCR extraction returned no readable text or description.');
+/**
+ * Extracts verbatim text and semantic content from an image using a Gemini multimodal model
+ * (OCR_MODEL, falling back to GEMINI_MODEL, then the client default).
+ * Supports both Arabic and English printed and handwritten text, tables, and diagrams.
+ *
+ * @param {string} filePath - Absolute path to the image file.
+ * @returns {Promise<string>} Extracted OCR text or semantic visual description.
+ */
+async function extractTextFromImage(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Image file not found at path: ${filePath}`);
   }
 
-  console.log(`[ImageOCR] Successfully extracted ${extractedText.length} characters from image.`);
+  const mimeType = getImageMimeType(filePath);
+  const fileBuffer = fs.readFileSync(filePath);
+
+  console.log(`[ImageOCR] Processing image ${path.basename(filePath)} (${(fileBuffer.length / 1024).toFixed(1)} KB, ${mimeType})...`);
+
+  const extractedText = await generateText({
+    purpose: 'ocr',
+    modelEnv: 'OCR_MODEL',
+    parts: [{ inlineData: { mimeType, data: fileBuffer.toString('base64') } }, { text: OCR_PROMPT }],
+    generationConfig: { temperature: 0, maxOutputTokens: 16384 },
+  });
+
+  console.log(`[ImageOCR] Successfully extracted ${extractedText.length} characters from ${path.basename(filePath)}.`);
   return extractedText;
 }
 

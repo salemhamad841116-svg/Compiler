@@ -1,7 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+const { generateText } = require('./geminiClient');
 
 const STRICT_RAG_SYSTEM_INSTRUCTION = `
 You are a Private AI Assistant strictly limited to the user's personal book knowledge base.
@@ -22,23 +19,6 @@ CRITICAL RULES:
  * @returns {Promise<string>} Model response.
  */
 async function generateConstrainedAnswer(userQuestion, contextChunks) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not configured in environment variables.');
-  }
-
-  const client = genAI || new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-
-  const model = client.getGenerativeModel({
-    model: modelName,
-    systemInstruction: STRICT_RAG_SYSTEM_INSTRUCTION,
-    generationConfig: {
-      temperature: 0.2, // Low temperature for factual fidelity
-      topP: 0.8,
-      maxOutputTokens: 1024,
-    },
-  });
-
   const formattedContext = contextChunks
     .map((item, index) => {
       return `--- CONTEXT EXCERPT #${index + 1} (Source: "${item.bookTitle}", Relevance: ${(item.similarity * 100).toFixed(1)}%) ---\n${item.chunk}\n`;
@@ -55,8 +35,16 @@ ${userQuestion}
 Please provide a precise and faithful answer based solely on the context above:
 `;
 
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  return generateText({
+    purpose: 'chat',
+    modelEnv: 'GEMINI_MODEL',
+    parts: [{ text: prompt }],
+    systemInstruction: STRICT_RAG_SYSTEM_INSTRUCTION,
+    // Low temperature for factual fidelity. The token budget is generous because newer
+    // Gemini models spend part of it on internal reasoning before the visible answer.
+    generationConfig: { temperature: 0.2, topP: 0.8, maxOutputTokens: 8192 },
+    timeoutMs: 120000,
+  });
 }
 
 module.exports = {

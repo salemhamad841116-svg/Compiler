@@ -163,6 +163,13 @@ router.get(
 );
 
 router.post(
+  '/documents/retry-failed',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: jobQueue.retryAllFailed(req.user, { ip: clientIp(req) }) });
+  })
+);
+
+router.post(
   '/documents/:id/retry',
   asyncHandler(async (req, res) => {
     const force = req.body && req.body.force === true;
@@ -207,7 +214,7 @@ router.post(
     if (category && category !== 'All') filterOptions.category = category;
     if (language && language !== 'All') filterOptions.language = language;
     try {
-      const emb = await provider().embed(String(query).trim());
+      const emb = await provider().embed(String(query).trim(), { taskType: 'RETRIEVAL_QUERY' });
       const parsedMin = parseFloat(minSimilarity);
       const results = await searchVectorDatabase(emb, parseInt(topK, 10) || 5, Number.isFinite(parsedMin) ? parsedMin : 0.3, filterOptions);
       res.json({ success: true, query: String(query).trim(), matchesFound: results.length, data: results });

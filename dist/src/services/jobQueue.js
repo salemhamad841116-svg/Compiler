@@ -125,4 +125,25 @@ function retryDocument(documentId, user, { force = false, ip } = {}) {
   return { queued };
 }
 
-module.exports = { enqueue, start, stop, pump, waitForIdle, queueStats, retryDocument };
+/**
+ * Re-queues every failed document whose file is still in the Data Vault (admin / ops recovery,
+ * e.g. after fixing the AI key or model configuration). Safe to run repeatedly.
+ * @param {Object} actor - admin user (or a system actor with role 'admin' for CLI use)
+ */
+function retryAllFailed(actor, { ip } = {}) {
+  const failed = all("SELECT id FROM documents WHERE index_status = 'failed' OR ocr_status = 'failed' ORDER BY uploaded_at");
+  let queued = 0;
+  const skipped = [];
+  for (const d of failed) {
+    try {
+      if (retryDocument(d.id, actor, { ip }).queued) queued++;
+      else skipped.push({ id: d.id, code: 'ALREADY_QUEUED' });
+    } catch (e) {
+      skipped.push({ id: d.id, code: e.code || 'ERROR' });
+    }
+  }
+  console.log(`[Queue] retry-all-failed by ${actor && actor.email ? actor.email : (actor && actor.name) || 'system'}: ${queued} queued, ${skipped.length} skipped of ${failed.length} failed`);
+  return { failed: failed.length, queued, skipped: skipped.length, skippedDetails: skipped.slice(0, 50) };
+}
+
+module.exports = { enqueue, start, stop, pump, waitForIdle, queueStats, retryDocument, retryAllFailed };

@@ -18,6 +18,11 @@ class PipelineError extends Error {
   }
 }
 
+/** Short, single-line identity of a document for logs. */
+function docLabel(doc) {
+  return `${doc.id} kind=${doc.kind} type=${doc.file_type} "${String(doc.original_filename || doc.title || '').slice(0, 80)}"`;
+}
+
 function floatsToBlob(arr) {
   const f = new Float32Array(arr);
   return Buffer.from(f.buffer, f.byteOffset, f.byteLength);
@@ -27,11 +32,12 @@ async function embedWithRetry(text) {
   let attempt = 0;
   for (;;) {
     try {
-      return await provider().embed(text);
+      return await provider().embed(text, { taskType: 'RETRIEVAL_DOCUMENT' });
     } catch (e) {
       const err = classifyError(e);
       if (err.retryable && attempt < config.embeddingRetries) {
         attempt++;
+        console.warn(`[Pipeline] embed attempt ${attempt} failed (${err.code}): ${err.message} - retrying`);
         await new Promise((r) => setTimeout(r, 200 * attempt));
         continue;
       }
@@ -86,6 +92,7 @@ async function extract(doc, abs) {
       for (const pg of bookPages) {
         const pageAbs = storage.resolve(pg.vault_path);
         if (!pageAbs || !fs.existsSync(pageAbs)) {
+          console.error(`[Pipeline] ${doc.id}: page ${pg.page_number} file missing in vault (${pg.vault_path})`);
           run("UPDATE book_pages SET ocr_status = 'failed' WHERE id = ?", pg.id);
           info.pagesFailed++;
           continue;
@@ -95,6 +102,7 @@ async function extract(doc, abs) {
           text = await provider().ocrImage(pageAbs, pg.original_filename || '');
         } catch (e) {
           const err = classifyError(e);
+          console.error(`[Pipeline] ${doc.id}: OCR failed on page ${pg.page_number}/${bookPages.length} (${err.code}): ${err.message}`, e && e.message !== err.message ? `| raw: ${e.message}` : '');
           run("UPDATE book_pages SET ocr_status = 'failed' WHERE id = ?", pg.id);
           throw new PipelineError(err.code, err.message, 'ocr', err.retryable);
         }
@@ -157,6 +165,8 @@ async function processDocument(documentId) {
   if (!doc) return { skipped: true };
 
   const needsExtractionStage = doc.kind === 'image' || doc.kind === 'media';
+  const t0 = Date.now();
+  console.log(`[Pipeline] START ${docLabel(doc)} attempt=${(doc.attempts || 0) + 1} provider=${provider().name}`);
   run(
     `UPDATE documents SET index_status = 'processing', ocr_status = ?, processing_started_at = ?, attempts = attempts + 1,
        failure_code = NULL, failure_reason = NULL WHERE id = ?`,
@@ -175,6 +185,7 @@ async function processDocument(documentId) {
     if (!chunks.length) throw new PipelineError('NO_TEXT', 'No text chunks could be produced.', 'extract', false);
 
     stage = 'embed';
+    console.log(`[Pipeline] ${documentId}: extracted ${info.charCount} chars -> ${chunks.length} chunk(s); embedding...`);
     const embedded = [];
     for (const c of chunks) {
       const vec = await embedWithRetry(c.text);
@@ -203,11 +214,17 @@ async function processDocument(documentId) {
       action: 'document.processing_completed', doc: get('SELECT * FROM documents WHERE id = ?', documentId),
       completedAt, countsLifetime: first, detail: { chunks: embedded.length, firstCompletion: first },
     });
+    console.log(`[Pipeline] DONE ${documentId}: ${embedded.length} chunk(s) indexed in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     return { ok: true, chunks: embedded.length };
   } catch (e) {
     const err = e instanceof PipelineError ? e : (() => { const c = classifyError(e); return new PipelineError(c.code, c.message, stage, c.retryable); })();
     const info = err.info || partialInfo || (e && e.info) || {};
     const ocrFailed = err.stage === 'ocr';
+    // Never fail silently: the reason is stored on the document AND written to the container log.
+    console.error(
+      `[Pipeline] FAILED ${docLabel(doc)} stage=${err.stage} code=${err.code} retryable=${Boolean(err.retryable)} after ${((Date.now() - t0) / 1000).toFixed(1)}s: ${err.message}`
+    );
+    if (!(e instanceof PipelineError) && e && e.stack) console.error(e.stack);
     run(
       `UPDATE documents SET index_status = ?, ocr_status = ?, failure_code = ?, failure_reason = ?,
          pages_total = COALESCE(?, pages_total), pages_processed = ?, pages_failed = ?, pages_estimated = COALESCE(?, pages_estimated) WHERE id = ?`,

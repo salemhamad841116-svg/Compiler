@@ -111,6 +111,8 @@ const codeSet = new Set(['UNKNOWN', 'NETWORK_ERROR', 'NON_JSON_RESPONSE', 'EMPTY
   }
 })(path.join(ROOT, 'src'));
 ['LIMIT_', 'URL_'].forEach((p) => codeSet.delete(p));
+// Environment variable names (e.g. 'OCR_MODEL') match the code-prefix heuristic but are config keys, not error codes.
+[...codeSet].filter((c) => /_MODEL$/.test(c)).forEach((c) => codeSet.delete(c));
 codeSet.forEach((c) => keys.add(`errors.${c}`));
 ['CSRF_REJECTED', 'SESSION_EXPIRED', 'SESSION_REVOKED'].forEach((c) => keys.add(`errors.${c}`));
 

@@ -532,9 +532,20 @@
         kv(t('sys.storage'), chip(d.storage.writable ? 'completed' : 'failed', d.storage.writable ? 'sys.storage_ok' : 'sys.storage_bad')),
         kv(t('sys.cloud_mirror'), t(`sys.mirror_${d.storage.cloudMirror}`)),
         kv(t('sys.queue'), t('sys.queue_text', { queued: fmtNumber(d.queue.queued), running: fmtNumber(d.queue.running), failed: fmtNumber(d.queue.failed) }))),
-      d.ai.error ? h('div', { class: 'notice notice-warn' }, `${t(`errors.${d.ai.error.code}`)} [${d.ai.error.code}]`) : null,
+      d.ai.error ? h('div', { class: 'notice notice-warn' }, `${t(`errors.${d.ai.error.code}`)} [${d.ai.error.code}]`, d.ai.error.message ? h('div', { class: 'muted', dir: 'ltr' }, d.ai.error.message) : null) : null,
       d.storage.persistentVolumeHint ? h('p', { class: 'muted' }, t('sys.volume_hint')) : null));
     healthPanel.reload();
+    const retryAllBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: async () => {
+      if (!(await confirmDialog({ title: t('sys.retry_all_failed'), message: t('sys.retry_all_failed_msg'), confirmLabel: t('sys.retry_all_failed'), kind: 'primary' }))) return;
+      retryAllBtn.disabled = true;
+      try {
+        const r = await api.post('/api/admin/documents/retry-failed', {});
+        toast(t('sys.retry_all_done', { queued: fmtNumber(r.data.queued), skipped: fmtNumber(r.data.skipped) }), 'success');
+        healthPanel.reload({ silent: true });
+        if (state.stats) state.stats.reload({ silent: true });
+        if (state.docs) state.docs.reload({ silent: true });
+      } catch (err) { toastError(err); } finally { retryAllBtn.disabled = false; }
+    } }, icon('arrows-rotate'), ' ', t('sys.retry_all_failed'));
 
     // reconciliation
     const recHolder = h('div', {});
@@ -586,7 +597,7 @@
     } }, icon('magnifying-glass'), ' ', t('sys.search_run'));
 
     root.append(
-      h('div', { class: 'card' }, h('div', { class: 'toolbar' }, h('h2', {}, t('sys.health_title')), h('div', { class: 'toolbar-actions' }, checkBtn, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => healthPanel.reload() }, icon('rotate-right'), ' ', t('common.refresh')))), healthHolder),
+      h('div', { class: 'card' }, h('div', { class: 'toolbar' }, h('h2', {}, t('sys.health_title')), h('div', { class: 'toolbar-actions' }, checkBtn, retryAllBtn, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => healthPanel.reload() }, icon('rotate-right'), ' ', t('common.refresh')))), healthHolder),
       h('div', { class: 'card' }, h('div', { class: 'toolbar' }, h('h2', {}, t('sys.reconcile_title')), h('div', { class: 'toolbar-actions' },
         h('button', { type: 'button', class: 'btn btn-sm', onclick: () => runRec(false) }, icon('magnifying-glass-chart'), ' ', t('sys.reconcile_analyze')),
         h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => runRec(true) }, icon('screwdriver-wrench'), ' ', t('sys.reconcile_apply')))),

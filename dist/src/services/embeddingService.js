@@ -1,31 +1,15 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+const { embedText } = require('./geminiClient');
 
 /**
- * Generates a vector embedding for a single text chunk using Gemini text-embedding-004.
+ * Generates a vector embedding for a single text chunk using Gemini (gemini-embedding-001 by default,
+ * truncated to EMBEDDING_DIMENSIONS, default 768).
  *
  * @param {string} textChunk - The text to be embedded.
+ * @param {{taskType?: string}} [opts] - RETRIEVAL_DOCUMENT for stored chunks, RETRIEVAL_QUERY for questions.
  * @returns {Promise<number[]>} Numerical vector array representing the text chunk.
  */
-async function generateVectorEmbedding(textChunk) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not defined in environment variables.');
-  }
-
-  const client = genAI || new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const embeddingModel = client.getGenerativeModel({
-    model: process.env.EMBEDDING_MODEL || 'text-embedding-004',
-  });
-
-  const response = await embeddingModel.embedContent(textChunk);
-
-  if (!response || !response.embedding || !response.embedding.values) {
-    throw new Error('Invalid response received from Gemini Embedding API.');
-  }
-
-  return response.embedding.values;
+async function generateVectorEmbedding(textChunk, opts = {}) {
+  return embedText(textChunk, opts);
 }
 
 /**
@@ -40,7 +24,7 @@ async function generateBatchEmbeddings(chunks, delayMs = 100) {
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const embedding = await generateVectorEmbedding(chunk);
+    const embedding = await generateVectorEmbedding(chunk, { taskType: 'RETRIEVAL_DOCUMENT' });
     results.push({ chunk, embedding });
 
     if (delayMs > 0 && i < chunks.length - 1) {

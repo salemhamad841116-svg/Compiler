@@ -15,8 +15,14 @@ class AiError extends Error {
 function classifyError(err) {
   if (err instanceof AiError) return err;
   const msg = String((err && err.message) || err || 'Unknown AI error');
-  if (/API key not valid|API_KEY_INVALID|API key.*invalid/i.test(msg)) {
+  if (/API key not valid|API_KEY_INVALID|API key.*invalid|API key expired/i.test(msg)) {
     return new AiError('AI_KEY_INVALID', 'The Gemini API key is invalid. Set a valid GEMINI_API_KEY on the server.', false);
+  }
+  if (/\b403\b|PERMISSION_DENIED|leaked|SERVICE_DISABLED|API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED/i.test(msg)) {
+    return new AiError('AI_KEY_INVALID', `The Gemini API key was rejected (permission denied: API not enabled, key restricted, or key revoked). ${msg.slice(0, 220)}`, false);
+  }
+  if (/User location is not supported|FAILED_PRECONDITION/i.test(msg)) {
+    return new AiError('AI_PROVIDER_ERROR', `The Gemini API refused the request for this project/region: ${msg.slice(0, 220)}`, false);
   }
   if (/not configured|not defined|GEMINI_API_KEY/i.test(msg) && !/invalid/i.test(msg)) {
     return new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
@@ -53,7 +59,7 @@ function mockEmbedding(text) {
 
 const mockProvider = {
   name: 'mock',
-  async embed(text) {
+  async embed(text, _opts) {
     if (String(text).includes('[[FAIL_EMBED]]')) throw new AiError('AI_PROVIDER_ERROR', 'Injected embedding failure (mock provider).', true);
     return mockEmbedding(text);
   },
@@ -74,10 +80,10 @@ const mockProvider = {
 // ------------------------------------------------------------------ gemini provider
 const geminiProvider = {
   name: 'gemini',
-  async embed(text) {
+  async embed(text, opts = {}) {
     if (!config.geminiKeyUsable) throw new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
     try {
-      return await require('./embeddingService').generateVectorEmbedding(text);
+      return await require('./embeddingService').generateVectorEmbedding(text, opts);
     } catch (e) {
       throw classifyError(e);
     }
@@ -99,12 +105,15 @@ const geminiProvider = {
     }
   },
   async health({ check = false } = {}) {
+    const d = require('./geminiClient').describeConfig();
     const info = {
       provider: 'gemini',
       configured: config.geminiKeyUsable,
-      keyLooksLikePlaceholder: Boolean(process.env.GEMINI_API_KEY) && !config.geminiKeyUsable,
-      embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-004',
-      generationModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+      keyLooksLikePlaceholder: Boolean(config.geminiApiKey) && !config.geminiKeyUsable,
+      embeddingModel: d.embeddingModel,
+      embeddingDimensions: d.embeddingDimensions,
+      generationModel: d.generationModel,
+      ocrModel: d.ocrModel,
       status: config.geminiKeyUsable ? 'unchecked' : 'not_configured',
     };
     if (!config.geminiKeyUsable) {
@@ -113,7 +122,9 @@ const geminiProvider = {
     }
     if (check) {
       try {
-        await this.embed('health check');
+        await this.embed('health check', { taskType: 'RETRIEVAL_QUERY' });
+        await require('./geminiClient').generateText({ purpose: 'ocr', modelEnv: 'OCR_MODEL', parts: [{ text: 'Reply with the single word OK.' }], generationConfig: { maxOutputTokens: 512 }, timeoutMs: 30000 });
+        info.ocrModel = require('./geminiClient').describeConfig().ocrModel;
         info.status = 'ok';
       } catch (e) {
         info.status = 'error';

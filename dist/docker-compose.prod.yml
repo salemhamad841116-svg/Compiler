@@ -10,8 +10,15 @@ services:
       dockerfile: Dockerfile
     container_name: masruq_rag_backend
     restart: unless-stopped
+    # Later files override earlier ones. Put the real GEMINI_API_KEY in either file on the server
+    # (.env is optional; requires Docker Compose v2.24+ for the `required` flag).
+    # NOTE: .env is excluded from the image by .dockerignore, so it ONLY reaches the
+    # container through this env_file entry.
     env_file:
-      - .env.production
+      - path: .env.production
+        required: true
+      - path: .env
+        required: false
     environment:
       - NODE_ENV=production
       - PORT=3000

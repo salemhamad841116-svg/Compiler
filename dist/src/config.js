@@ -45,8 +45,15 @@ const config = {
   get cookieName() { return 'sid'; },
   get displayTimeZone() { return 'Asia/Dubai'; },
   get isProduction() { return process.env.NODE_ENV === 'production'; },
+  /**
+   * GEMINI_API_KEY with surrounding quotes / whitespace / Windows CR removed
+   * (common when the key is pasted into an env_file as KEY="..." or with CRLF line endings).
+   */
+  get geminiApiKey() {
+    return String(process.env.GEMINI_API_KEY || '').replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '').trim();
+  },
   get geminiKeyUsable() {
-    const k = process.env.GEMINI_API_KEY || '';
+    const k = this.geminiApiKey;
     return Boolean(k) && !/your_|_here|placeholder|changeme/i.test(k);
   },
 };
