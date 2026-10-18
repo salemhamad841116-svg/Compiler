@@ -13,6 +13,8 @@ const { searchVectorDatabase } = require('../models/vectorDbModel');
 const { AppError } = require('../utils/errors');
 const { nowIso } = require('../utils/clock');
 const config = require('../config');
+const settings = require('../services/settingsService');
+const e2e = require('../services/e2eService');
 
 const router = express.Router();
 router.use(requireAuth(), requireRole('admin'));
@@ -223,6 +225,64 @@ router.post(
       const c = classifyError(e);
       throw new AppError(c.retryable ? 503 : 502, c.code, c.message);
     }
+  })
+);
+
+// ----------------------------------------------------------- system settings: AI keys (Phase 4)
+// Keys are write-only: no endpoint ever returns a stored key, only masked status (last 4 chars).
+function aiSettingsPayload() {
+  const d = require('../services/geminiClient').describeConfig();
+  return {
+    provider: config.aiProvider,
+    keys: settings.describeKeys(),
+    models: {
+      embedding: d.embeddingModel,
+      embeddingDimensions: d.embeddingDimensions,
+      generation: d.generationModel,
+      ocr: d.ocrModel,
+      transcription: d.transcriptionModel,
+    },
+  };
+}
+
+router.get(
+  '/settings/ai',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: aiSettingsPayload() });
+  })
+);
+
+router.put(
+  '/settings/ai/keys',
+  asyncHandler(async (req, res) => {
+    const { primary, fallback1, fallback2 } = req.body || {};
+    settings.setGeminiKeys({ primary, fallback1, fallback2 }, req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: aiSettingsPayload() });
+  })
+);
+
+router.delete(
+  '/settings/ai/keys/:slot',
+  asyncHandler(async (req, res) => {
+    settings.clearGeminiKey(req.params.slot, req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: aiSettingsPayload() });
+  })
+);
+
+router.post(
+  '/settings/ai/keys/:slot/test',
+  asyncHandler(async (req, res) => {
+    const result = await provider().testKey(req.params.slot);
+    res.json({ success: true, data: { result, ...aiSettingsPayload() } });
+  })
+);
+
+// ----------------------------------------------------------- end-to-end self-test (Phase 4)
+router.post(
+  '/system/e2e-test',
+  asyncHandler(async (req, res) => {
+    const timeoutMs = Math.min(Math.max(parseInt((req.body && req.body.timeoutMs) || 180000, 10) || 180000, 5000), 600000);
+    res.json({ success: true, data: await e2e.runSelfTest(req.user, { ip: clientIp(req), timeoutMs }) });
   })
 );
 

@@ -26,7 +26,8 @@
     "clear_confirm": "Clear current conversation history?",
     "error_label": "Error",
     "network_error": "Could not connect to the search index server.",
-    "server_busy": "The assistant is temporarily unavailable. Please try again shortly."
+    "server_busy": "The assistant is temporarily unavailable. Please try again shortly.",
+    "page_n": "Page {n}"
   },
   "common": {
     "lang_arabic": "Arabic",
@@ -360,7 +361,12 @@
     },
     "system": {
       "legacy_import": "Old data imported",
-      "reconciliation_applied": "Data reconciliation applied"
+      "reconciliation_applied": "Data reconciliation applied",
+      "e2e_test": "End-to-end self-test"
+    },
+    "settings": {
+      "api_key_updated": "API key saved",
+      "api_key_cleared": "API key removed"
     }
   },
   "up": {
@@ -516,7 +522,8 @@
     "link_expires": "Valid until {time}.",
     "link_once": "This link is shown only once. Copy it now.",
     "copy": "Copy",
-    "link_copied": "Link copied."
+    "link_copied": "Link copied.",
+    "nav_settings": "System Settings"
   },
   "cat": {
     "title": "Categories",
@@ -674,12 +681,104 @@
     "NO_TEXT": "No text could be extracted.",
     "OCR_EMPTY": "No text was recognized in the image.",
     "TRANSCRIPT_EMPTY": "No speech was recognized.",
-    "AI_NOT_CONFIGURED": "The AI service key is missing or invalid on the server.",
-    "AI_KEY_INVALID": "The AI service rejected the server key.",
+    "AI_NOT_CONFIGURED": "No AI key is configured. An administrator can add one in System Settings.",
+    "AI_KEY_INVALID": "The AI service rejected the key. Check the keys in System Settings.",
     "AI_MODEL_UNAVAILABLE": "The configured AI model is unavailable.",
     "AI_RATE_LIMIT": "The AI service is busy. Try again shortly.",
     "AI_NETWORK": "The server could not reach the AI service.",
     "AI_PROVIDER_ERROR": "The AI service returned an error.",
-    "AI_FAILED": "The AI service failed."
+    "AI_FAILED": "The AI service failed.",
+    "INVALID_SLOT": "Unknown key slot.",
+    "INVALID_API_KEY_FORMAT": "This does not look like a valid API key (20-200 characters, no spaces).",
+    "NO_KEYS_PROVIDED": "Enter at least one API key to save.",
+    "KEY_SLOT_EMPTY": "No key is stored in this slot.",
+    "E2E_ALREADY_RUNNING": "A self-test is already running. Wait for it to finish.",
+    "E2E_PROBE_MISSING": "The temporary test document disappeared during the test.",
+    "E2E_TIMEOUT": "Processing did not finish in time. Check the processing queue and the AI key.",
+    "E2E_ERROR": "The self-test stage failed unexpectedly."
+  },
+  "set": {
+    "keys_title": "AI API Keys",
+    "live_notice": "Changes apply immediately to uploads, processing and the public chat. No restart is needed.",
+    "mock_provider": "The server is running the test (mock) AI provider. Keys are stored but not used until AI_PROVIDER is set to gemini.",
+    "slot_primary": "Primary Gemini Key",
+    "slot_fallback1": "Fallback Key 1",
+    "slot_fallback2": "Fallback Key 2",
+    "slot_env": "Server environment key (.env)",
+    "stored_ph": "Stored key ending in {last4}. Type a new key to replace it.",
+    "empty_ph": "Paste a Gemini API key",
+    "save": "Save Keys",
+    "test": "Test",
+    "clear": "Remove",
+    "clear_title": "Remove API key",
+    "clear_msg": "Remove the key stored in \"{slot}\"? Requests will use the next key in order.",
+    "cleared_ok": "API key removed.",
+    "saved_ok": "{n} key(s) saved and active now.",
+    "test_ok": "{slot}: the key works.",
+    "test_failed": "{slot}: the key test failed",
+    "last_checked": "Checked {time}",
+    "updated_by": "Saved {time} by {name}",
+    "st_ok": "Working",
+    "st_invalid": "Invalid",
+    "st_rate_limited": "Rate limited",
+    "st_error": "Error",
+    "st_undecryptable": "Cannot be read",
+    "st_untested": "Not tested",
+    "st_empty": "Empty",
+    "env_hint": "Used as the last fallback after the keys above.",
+    "env_missing": "No key is set in the server environment.",
+    "env_placeholder": "The server environment contains a placeholder value, not a real key.",
+    "order": "Order used: {list}",
+    "no_keys": "No usable key. Uploads cannot be processed until a key is saved.",
+    "security_note": "Keys are encrypted (AES-256-GCM) before they are stored and are never sent back to the browser. Only the last 4 characters are shown. Every change is recorded in the activity log.",
+    "models_title": "AI models in use",
+    "models_hint": "Every key uses the same models, so documents indexed with any key stay searchable.",
+    "m_embedding": "Embeddings (vector search)",
+    "m_generation": "Chat answers",
+    "m_ocr": "OCR (images and scanned pages)",
+    "m_transcription": "Audio and video transcription"
+  },
+  "e2e": {
+    "title": "End-to-end self-test",
+    "hint": "Uploads a small temporary document, processes it with the live AI key, checks the admin statistics, asks the public chat about it, then deletes it. Use it to prove the whole platform works together.",
+    "run": "Run self-test",
+    "running": "Running the self-test. This usually takes 10 to 60 seconds...",
+    "passed": "All stages passed. Uploads are processed and immediately searchable in the public chat.",
+    "failed_summary": "The self-test found a problem. See the failed stage below.",
+    "ok": "Passed",
+    "failed": "Failed",
+    "col_stage": "Stage",
+    "col_result": "Result",
+    "col_time": "Time",
+    "col_detail": "Details",
+    "stage_upload": "Upload (as a supervisor would)",
+    "stage_processing": "Processing: text extraction and embeddings",
+    "stage_admin_visibility": "Visible in the admin dashboard",
+    "stage_chat_retrieval": "Found by the public chat search",
+    "stage_chat_answer": "Answer generated from the document",
+    "stage_cleanup": "Temporary document deleted",
+    "f_chunks": "{n} searchable chunk(s)",
+    "f_similarity": "Match {pct}% (chat minimum {min}%)",
+    "f_not_top": "Another document ranked higher",
+    "f_status": "Status: {status}",
+    "f_answer_missing": "The answer did not contain the verification code"
+  },
+  "live": {
+    "doc_completed": "\"{title}\" is processed and searchable now.",
+    "doc_failed": "Processing failed for \"{title}\".",
+    "docs_completed_n": "{n} files are processed and searchable now.",
+    "docs_failed_n": "Processing failed for {n} files."
+  },
+  "pwa": {
+    "install": "Install app",
+    "install_hint": "Install this app on your device for quick, full-screen access.",
+    "ios_hint": "To install: tap the Share button, then \"Add to Home Screen\".",
+    "update_ready": "A new version is available.",
+    "reload": "Update now",
+    "dismiss": "Dismiss",
+    "offline_title": "You are offline",
+    "offline_sup": "Waraqa needs an internet connection to sign in and upload files. Your work is saved on the server.",
+    "offline_chat": "Answers are searched live in the knowledge base, so Bahth needs an internet connection.",
+    "offline_retry": "Try again"
   }
 }

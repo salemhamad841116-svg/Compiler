@@ -3,6 +3,11 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('../config');
 
+/** True when at least one usable Gemini key exists (System Settings DB slots or environment). */
+function keyAvailable() {
+  return require('./settingsService').hasUsableGeminiKey();
+}
+
 /** Machine-readable AI failure with a stable code and retry hint. */
 class AiError extends Error {
   constructor(code, message, retryable = false) {
@@ -75,13 +80,45 @@ const mockProvider = {
   async health() {
     return { provider: 'mock', configured: true, status: 'ok', note: 'Mock provider (tests only). Not for production.' };
   },
+  async testKey(slot) {
+    // Keys containing "INVALID" simulate a rejected key so tests can exercise the failure path.
+    return runKeyTest(slot, async (key) => {
+      if (/INVALID/.test(key)) throw new AiError('AI_KEY_INVALID', 'Injected invalid key (mock provider).', false);
+      return { embeddingDimensions: MOCK_DIM, generationModel: 'mock' };
+    });
+  },
 };
+
+/** Shared per-slot test runner: pins ONE key (no rotation) and stores the observed health. */
+async function runKeyTest(slot, probe) {
+  const settings = require('./settingsService');
+  const source = slot === 'env' ? 'env' : `db:${slot}`;
+  if (slot !== 'env' && !settings.SLOTS.includes(slot)) {
+    const { AppError } = require('../utils/errors');
+    throw new AppError(400, 'INVALID_SLOT', `Unknown key slot "${slot}".`);
+  }
+  const key = settings.getKeyForSlot(slot);
+  if (!key) {
+    const { AppError } = require('../utils/errors');
+    throw new AppError(400, 'KEY_SLOT_EMPTY', 'No API key is stored in this slot.');
+  }
+  const t0 = Date.now();
+  try {
+    const info = await probe(key);
+    settings.recordKeyHealth(source, true);
+    return { slot, status: 'ok', ms: Date.now() - t0, ...info };
+  } catch (e) {
+    const c = classifyError(e);
+    settings.recordKeyHealth(source, false, c.code);
+    return { slot, status: 'error', ms: Date.now() - t0, error: { code: c.code, message: c.message } };
+  }
+}
 
 // ------------------------------------------------------------------ gemini provider
 const geminiProvider = {
   name: 'gemini',
   async embed(text, opts = {}) {
-    if (!config.geminiKeyUsable) throw new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
+    if (!keyAvailable()) throw new AiError('AI_NOT_CONFIGURED', 'No Gemini API key is configured (System Settings or GEMINI_API_KEY).', false);
     try {
       return await require('./embeddingService').generateVectorEmbedding(text, opts);
     } catch (e) {
@@ -89,7 +126,7 @@ const geminiProvider = {
     }
   },
   async ocrImage(filePath) {
-    if (!config.geminiKeyUsable) throw new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
+    if (!keyAvailable()) throw new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
     try {
       return await require('../utils/imageOcr').extractTextFromImage(filePath);
     } catch (e) {
@@ -97,7 +134,7 @@ const geminiProvider = {
     }
   },
   async transcribe(filePath) {
-    if (!config.geminiKeyUsable) throw new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
+    if (!keyAvailable()) throw new AiError('AI_NOT_CONFIGURED', 'GEMINI_API_KEY is not configured on the server.', false);
     try {
       return await require('../utils/mediaTranscriber').transcribeMediaFile(filePath);
     } catch (e) {
@@ -108,16 +145,17 @@ const geminiProvider = {
     const d = require('./geminiClient').describeConfig();
     const info = {
       provider: 'gemini',
-      configured: config.geminiKeyUsable,
-      keyLooksLikePlaceholder: Boolean(config.geminiApiKey) && !config.geminiKeyUsable,
+      configured: keyAvailable(),
+      keySources: d.keySources,
+      keyLooksLikePlaceholder: Boolean(config.geminiApiKey) && !config.geminiKeyUsable && !keyAvailable(),
       embeddingModel: d.embeddingModel,
       embeddingDimensions: d.embeddingDimensions,
       generationModel: d.generationModel,
       ocrModel: d.ocrModel,
-      status: config.geminiKeyUsable ? 'unchecked' : 'not_configured',
+      status: keyAvailable() ? 'unchecked' : 'not_configured',
     };
-    if (!config.geminiKeyUsable) {
-      info.error = { code: 'AI_NOT_CONFIGURED', message: 'GEMINI_API_KEY is missing or still a placeholder value.' };
+    if (!keyAvailable()) {
+      info.error = { code: 'AI_NOT_CONFIGURED', message: 'No Gemini API key: add one in System Settings (or GEMINI_API_KEY in the environment).' };
       return info;
     }
     if (check) {
@@ -127,11 +165,21 @@ const geminiProvider = {
         info.ocrModel = require('./geminiClient').describeConfig().ocrModel;
         info.status = 'ok';
       } catch (e) {
+        const c = classifyError(e);
         info.status = 'error';
-        info.error = { code: e.code || 'AI_FAILED', message: e.message };
+        info.error = { code: c.code, message: c.message };
       }
     }
     return info;
+  },
+  async testKey(slot) {
+    return runKeyTest(slot, async (key) => {
+      const gc = require('./geminiClient');
+      const vec = await gc.embedText('health check', { taskType: 'RETRIEVAL_QUERY', key });
+      await gc.generateText({ purpose: 'chat', modelEnv: 'GEMINI_MODEL', parts: [{ text: 'Reply with the single word OK.' }], generationConfig: { maxOutputTokens: 512 }, timeoutMs: 30000, key });
+      const d = gc.describeConfig();
+      return { embeddingDimensions: Array.isArray(vec) ? vec.length : null, embeddingModel: d.embeddingModel, generationModel: d.generationModel };
+    });
   },
 };
 

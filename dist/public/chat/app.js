@@ -69,7 +69,7 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
             <div class="citation-toggle">
               <div class="citation-title-box">
                 <i class="fa-solid fa-file-lines"></i>
-                <span>#${i + 1}: ${escapeHtml(src.bookTitle)}</span>
+                <span>#${i + 1}: ${escapeHtml(src.bookTitle)}${src.page ? ` · ${escapeHtml(tr('chat.page_n', { n: src.page }))}` : ''}</span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="citation-badge">${escapeHtml(tr('chat.match', { pct: (src.similarity * 100).toFixed(1) }))}</span>

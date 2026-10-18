@@ -602,7 +602,164 @@
         h('button', { type: 'button', class: 'btn btn-sm', onclick: () => runRec(false) }, icon('magnifying-glass-chart'), ' ', t('sys.reconcile_analyze')),
         h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => runRec(true) }, icon('screwdriver-wrench'), ' ', t('sys.reconcile_apply')))),
       h('p', { class: 'muted' }, t('sys.reconcile_hint')), recHolder),
-      h('div', { class: 'card' }, h('h2', {}, t('sys.search_title')), h('p', { class: 'muted' }, t('sys.search_hint')), h('div', { class: 'filter-row' }, q, cat, go), results));
+      h('div', { class: 'card' }, h('h2', {}, t('sys.search_title')), h('p', { class: 'muted' }, t('sys.search_hint')), h('div', { class: 'filter-row' }, q, cat, go), results),
+      buildE2eCard());
+  }
+
+  // ------------------------------------------------------------------ end-to-end self-test
+  function e2eStageRow(s) {
+    const d = s.detail || {};
+    const facts = [];
+    if (d.chunks !== undefined) facts.push(t('e2e.f_chunks', { n: fmtNumber(d.chunks) }));
+    if (d.similarity !== undefined && d.similarity !== null) facts.push(t('e2e.f_similarity', { pct: Math.round(d.similarity * 100), min: Math.round((d.chatThreshold || 0) * 100) }));
+    if (d.topIsProbe === false) facts.push(t('e2e.f_not_top'));
+    if (d.listedStatus) facts.push(t('e2e.f_status', { status: t(`docstatus.${d.listedStatus}`) }));
+    if (d.answerHasToken === false) facts.push(t('e2e.f_answer_missing'));
+    const err = d.code ? h('div', { class: 'muted', dir: 'ltr' }, `${t(`errors.${d.code}`)} [${d.code}]${d.message ? ` - ${d.message}` : ''}`) : null;
+    return h('tr', {},
+      h('td', {}, t(`e2e.stage_${s.stage}`)),
+      h('td', {}, chip(s.ok ? 'completed' : 'failed', s.ok ? 'e2e.ok' : 'e2e.failed')),
+      h('td', { dir: 'ltr' }, s.ms ? `${fmtNumber(s.ms)} ms` : '-'),
+      h('td', {}, facts.join(' · '), err, d.answerPreview ? h('div', { class: 'muted', dir: 'auto' }, d.answerPreview) : null));
+  }
+
+  function buildE2eCard() {
+    const out = h('div', {});
+    const btn = h('button', { type: 'button', class: 'btn btn-primary btn-sm', onclick: async () => {
+      btn.disabled = true;
+      clear(out);
+      out.appendChild(h('div', { class: 'notice' }, t('e2e.running')));
+      try {
+        const r = await api.post('/api/admin/system/e2e-test', {});
+        const res = r.data;
+        clear(out);
+        out.append(
+          h('div', { class: `notice ${res.ok ? 'notice-ok' : 'notice-warn'}` }, t(res.ok ? 'e2e.passed' : 'e2e.failed_summary'), ' ', h('code', { dir: 'ltr' }, res.token)),
+          h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
+            h('thead', {}, h('tr', {}, [t('e2e.col_stage'), t('e2e.col_result'), t('e2e.col_time'), t('e2e.col_detail')].map((x) => h('th', {}, x)))),
+            h('tbody', {}, res.stages.map(e2eStageRow)))));
+        toast(t(res.ok ? 'e2e.passed' : 'e2e.failed_summary'), res.ok ? 'success' : 'error');
+      } catch (err) {
+        clear(out);
+        out.appendChild(errorBox(err, () => btn.click()));
+      } finally { btn.disabled = false; }
+    } }, icon('route'), ' ', t('e2e.run'));
+    return h('div', { class: 'card' },
+      h('div', { class: 'toolbar' }, h('h2', {}, t('e2e.title')), h('div', { class: 'toolbar-actions' }, btn)),
+      h('p', { class: 'muted' }, t('e2e.hint')), out);
+  }
+
+  // ------------------------------------------------------------------ system settings (API keys)
+  const KEY_STATUS_CHIP = { ok: 'completed', invalid: 'failed', error: 'failed', undecryptable: 'failed', rate_limited: 'pending', untested: 'queued', empty: 'not_applicable' };
+
+  function keyStatusChip(status) {
+    return chip(KEY_STATUS_CHIP[status] || 'queued', `set.st_${status in KEY_STATUS_CHIP ? status : 'untested'}`);
+  }
+
+  function sourceLabel(src) {
+    return t(src === 'env' ? 'set.slot_env' : `set.slot_${String(src).replace(/^db:/, '')}`);
+  }
+
+  function buildSettings(root) {
+    const inputs = {};
+    const holder = h('div', {});
+    let busy = false;
+
+    async function testSlot(slot, btn) {
+      btn.disabled = true;
+      try {
+        const r = await api.post(`/api/admin/settings/ai/keys/${slot}/test`, {});
+        const res = r.data.result;
+        if (res.status === 'ok') toast(t('set.test_ok', { slot: sourceLabel(slot === 'env' ? 'env' : `db:${slot}`) }), 'success');
+        else toast(`${t('set.test_failed', { slot: sourceLabel(slot === 'env' ? 'env' : `db:${slot}`) })}: ${t(`errors.${res.error.code}`)}`, 'error', 8000);
+        show(r.data);
+      } catch (err) { toastError(err); } finally { btn.disabled = false; }
+    }
+
+    async function clearSlot(slot) {
+      if (!(await confirmDialog({ title: t('set.clear_title'), message: t('set.clear_msg', { slot: t(`set.slot_${slot}`) }), confirmLabel: t('set.clear') }))) return;
+      try {
+        const r = await api.del(`/api/admin/settings/ai/keys/${slot}`);
+        toast(t('set.cleared_ok'), 'success');
+        show(r.data);
+      } catch (err) { toastError(err); }
+    }
+
+    function slotRow(s) {
+      const input = h('input', {
+        class: 'input', type: 'password', dir: 'ltr', autocomplete: 'new-password', spellcheck: 'false',
+        placeholder: s.configured ? t('set.stored_ph', { last4: s.last4 || '????' }) : t('set.empty_ph'),
+        'aria-label': t(`set.slot_${s.slot}`),
+      });
+      inputs[s.slot] = input;
+      const testBtn = h('button', { type: 'button', class: 'btn btn-sm', disabled: !s.configured, onclick: () => testSlot(s.slot, testBtn) }, icon('plug-circle-check'), ' ', t('set.test'));
+      const clearBtn = h('button', { type: 'button', class: 'btn btn-sm btn-danger', disabled: !s.configured, onclick: () => clearSlot(s.slot) }, icon('eraser'), ' ', t('set.clear'));
+      const meta = [];
+      if (s.lastCheckedAt) meta.push(t('set.last_checked', { time: fmtRelative(s.lastCheckedAt) }));
+      if (s.lastErrorCode) meta.push(`${t(`errors.${s.lastErrorCode}`)} [${s.lastErrorCode}]`);
+      if (s.updatedAt) meta.push(t('set.updated_by', { time: fmtDateTime(s.updatedAt), name: s.updatedBy || '-' }));
+      return h('div', { class: 'key-slot' },
+        h('div', { class: 'key-slot-head' }, h('strong', {}, t(`set.slot_${s.slot}`)), keyStatusChip(s.status), s.configured ? h('code', { dir: 'ltr' }, `•••• ${s.last4 || ''}`) : null),
+        h('div', { class: 'key-slot-body' }, input, testBtn, clearBtn),
+        meta.length ? h('small', { class: 'muted' }, meta.join(' · ')) : null);
+    }
+
+    function envRow(env) {
+      const testBtn = h('button', { type: 'button', class: 'btn btn-sm', disabled: !env.configured, onclick: () => testSlot('env', testBtn) }, icon('plug-circle-check'), ' ', t('set.test'));
+      const status = env.configured ? env.status || 'untested' : 'empty';
+      return h('div', { class: 'key-slot key-slot-env' },
+        h('div', { class: 'key-slot-head' }, h('strong', {}, t('set.slot_env')), keyStatusChip(status), env.configured ? h('code', { dir: 'ltr' }, `•••• ${env.last4}`) : null, testBtn),
+        h('small', { class: 'muted' }, t(env.placeholder ? 'set.env_placeholder' : env.configured ? 'set.env_hint' : 'set.env_missing')));
+    }
+
+    function render(d) {
+      Object.keys(inputs).forEach((k) => delete inputs[k]);
+      const wrap = h('div', {});
+      const order = d.keys.effectiveOrder;
+      const saveBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('floppy-disk'), ' ', t('set.save'));
+      const form = h('form', { class: 'key-form', onsubmit: async (e) => {
+        e.preventDefault();
+        if (busy) return;
+        const body = {};
+        Object.entries(inputs).forEach(([slot, el]) => { if (el.value.trim()) body[slot] = el.value.trim(); });
+        if (!Object.keys(body).length) { toast(t('errors.NO_KEYS_PROVIDED'), 'error'); return; }
+        busy = true;
+        saveBtn.disabled = true;
+        try {
+          const r = await api.put('/api/admin/settings/ai/keys', body);
+          toast(t('set.saved_ok', { n: Object.keys(body).length }), 'success');
+          show(r.data);
+        } catch (err) { toastError(err); } finally { busy = false; saveBtn.disabled = false; }
+      } }, d.keys.slots.map(slotRow), h('div', { class: 'form-actions' }, saveBtn));
+
+      wrap.append(
+        h('div', { class: 'card' },
+          h('div', { class: 'toolbar' }, h('h2', {}, t('set.keys_title')), h('div', { class: 'toolbar-actions' }, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => panel.reload() }, icon('rotate-right'), ' ', t('common.refresh')))),
+          h('div', { class: 'notice' }, t('set.live_notice')),
+          d.provider === 'mock' ? h('div', { class: 'notice notice-warn' }, t('set.mock_provider')) : null,
+          form,
+          envRow(d.keys.env),
+          h('div', { class: 'stats-meta' }, order.length ? t('set.order', { list: order.map(sourceLabel).join(' ← ') }) : t('set.no_keys')),
+          h('p', { class: 'muted' }, t('set.security_note'))),
+        h('div', { class: 'card' }, h('h2', {}, t('set.models_title')), h('p', { class: 'muted' }, t('set.models_hint')),
+          h('div', { class: 'kv-grid' },
+            kv(t('set.m_embedding'), h('span', { dir: 'ltr' }, `${d.models.embedding} (${d.models.embeddingDimensions})`)),
+            kv(t('set.m_generation'), h('span', { dir: 'ltr' }, d.models.generation)),
+            kv(t('set.m_ocr'), h('span', { dir: 'ltr' }, d.models.ocr)),
+            kv(t('set.m_transcription'), h('span', { dir: 'ltr' }, d.models.transcription)))));
+      return wrap;
+    }
+
+    function show(d) {
+      clear(panel.body);
+      panel.body.appendChild(render(d));
+    }
+
+    const panel = createPanel(holder, () => api.get('/api/admin/settings/ai').then((r) => r.data), render);
+    root.appendChild(holder);
+    panel.reload();
+    // Background refreshes (live events, section switch) never wipe a key the admin is still typing.
+    state.settingsPanel = { reload: (o) => (Object.values(inputs).some((el) => el.value) ? null : panel.reload(o)) };
   }
 
   // ------------------------------------------------------------------ app
@@ -610,8 +767,23 @@
     state.timers.forEach(clearInterval);
     state.timers = [];
     if (state.stats && state.stats.stop) state.stats.stop();
-    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null });
+    if (window.Live) window.Live.reset();
+    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null });
     clear(appRoot);
+  }
+
+  /** Real-time refresh: dashboards update the moment the backend reports a document change. */
+  function startLive() {
+    if (!window.Live) return;
+    const refreshDocs = window.Live.debounce(() => {
+      if (state.stats) state.stats.reload({ silent: true });
+      if (state.analyticsPanel) state.analyticsPanel.reload({ silent: true });
+      if (state.docs) state.docs.reload({ silent: true });
+      if (state.perSupervisor) state.perSupervisor.reload({ silent: true });
+    }, 700);
+    ['document.uploaded', 'document.queued', 'document.processing', 'document.completed', 'document.failed', 'document.deleted'].forEach((type) => window.Live.on(type, refreshDocs));
+    window.Live.on('settings.changed', window.Live.debounce(() => { if (state.settingsPanel) state.settingsPanel.reload({ silent: true }); }, 500));
+    window.Live.start();
   }
 
   function startApp(user, policy) {
@@ -627,6 +799,7 @@
       { id: 'upload', labelKey: 'adm.nav_upload', icon: 'cloud-arrow-up' },
       { id: 'activity', labelKey: 'adm.nav_activity', icon: 'clock-rotate-left' },
       { id: 'system', labelKey: 'adm.nav_system', icon: 'server' },
+      { id: 'settings', labelKey: 'adm.nav_settings', icon: 'key' },
       { id: 'account', labelKey: 'sup.nav_account', icon: 'user-gear' },
     ];
     const shell = window.Shell.create(appRoot, {
@@ -642,6 +815,7 @@
           if (id === 'supervisors' && state.supPanel) state.supPanel.reload({ silent: true });
           if (id === 'presence' && state.presencePanel) state.presencePanel.reload({ silent: true });
           if (id === 'categories' && state.catPanel) state.catPanel.reload({ silent: true });
+          if (id === 'settings' && state.settingsPanel) state.settingsPanel.reload({ silent: true });
         }
       },
     });
@@ -683,9 +857,11 @@
 
     state.activity = window.Widgets.mountActivity(S.activity, { admin: true, getCategories: () => state.categories, getSupervisors: () => state.supervisors });
     buildSystem(S.system);
+    buildSettings(S.settings);
     window.Shell.buildAccount(S.account, user, policy);
 
     state.timers.push(setInterval(() => { if (document.visibilityState === 'visible') loadCategories(); }, 30000));
+    startLive();
     shell.showInitial();
   }
 

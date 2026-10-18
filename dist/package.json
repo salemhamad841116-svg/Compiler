@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node --test --test-concurrency=1 tests/acceptance.test.js tests/phase3_dms.test.js tests/gemini_client.test.js"
+    "test": "node --test --test-concurrency=1 tests/acceptance.test.js tests/phase3_dms.test.js tests/gemini_client.test.js tests/phase4.test.js"
   },
   "keywords": [
     "rag",

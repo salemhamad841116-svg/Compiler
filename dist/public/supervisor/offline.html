@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <title>Waraqa</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid; place-items: center; padding: 24px; box-sizing: border-box;
+      background: radial-gradient(circle at 30% 20%, #1b2350 0%, #0b1020 60%);
+      color: #e8ecf8; font-family: 'Plus Jakarta Sans', 'Segoe UI', 'Noto Naskh Arabic', 'Geeza Pro', Tahoma, system-ui, sans-serif;
+      text-align: center;
+    }
+    .box { max-width: 420px; }
+    img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
+    h1 { font-size: 1.35rem; margin: 20px 0 8px; }
+    p { color: #98a3c7; line-height: 1.6; margin: 0 0 20px; }
+    button {
+      border: 0; border-radius: 12px; padding: 11px 22px; cursor: pointer; font: inherit; font-weight: 600; color: #fff;
+      background: linear-gradient(135deg, #6d7cff, #8b5cf6);
+    }
+  </style>
+</head>
+<body>
+  <main class="box">
+    <img src="icons/icon-192.png" alt="">
+    <h1 data-i18n="pwa.offline_title">You are offline</h1>
+    <p data-i18n="pwa.offline_sup">Waraqa needs an internet connection to sign in and upload files. Your work is saved on the server.</p>
+    <button type="button" id="retryBtn" data-i18n="pwa.offline_retry">Try again</button>
+  </main>
+  <script src="/js/i18n.js"></script>
+  <script>
+    (function () {
+      if (window.i18n) window.i18n.init({ defaultLang: 'ar', allowedLangs: ['ar'] }).catch(function () {});
+      document.getElementById('retryBtn').addEventListener('click', function () { window.location.href = './'; });
+      window.addEventListener('online', function () { window.location.href = './'; });
+    })();
+  </script>
+</body>
+</html>

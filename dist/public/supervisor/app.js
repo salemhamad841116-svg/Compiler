@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const { h, t, clear, errorBox } = window.ui;
+  const { h, t, clear, errorBox, toast } = window.ui;
   const api = window.api;
 
   const authRoot = document.getElementById('authRoot');
@@ -48,9 +48,33 @@
     state.timers.forEach(clearInterval);
     state.timers = [];
     if (state.stats && state.stats.stop) state.stats.stop();
+    if (window.Live) window.Live.reset();
     Object.assign(state, { shell: null, uploader: null, docs: null, activity: null, stats: null, categories: [], catError: null, catLoaded: false });
     clear(appRoot);
     bannerHost = null;
+  }
+
+  /** Real-time updates: the supervisor sees processing results the moment the backend finishes. */
+  function startLive() {
+    if (!window.Live) return;
+    const refresh = window.Live.debounce(() => {
+      if (state.docs) state.docs.reload({ silent: true });
+      if (state.stats) state.stats.reload({ silent: true });
+    }, 700);
+    ['document.uploaded', 'document.queued', 'document.processing', 'document.deleted'].forEach((type) => window.Live.on(type, refresh));
+    // Batches finish many files at once: one summary toast per burst instead of one per file.
+    const done = { completed: [], failed: [] };
+    const announce = window.Live.debounce(() => {
+      const c = done.completed.splice(0);
+      const f = done.failed.splice(0);
+      if (c.length === 1) toast(t('live.doc_completed', { title: c[0] }), 'success');
+      else if (c.length > 1) toast(t('live.docs_completed_n', { n: c.length }), 'success');
+      if (f.length === 1) toast(t('live.doc_failed', { title: f[0] }), 'error', 8000);
+      else if (f.length > 1) toast(t('live.docs_failed_n', { n: f.length }), 'error', 8000);
+    }, 1500);
+    window.Live.on('document.completed', (e) => { refresh(); done.completed.push(e.title || ''); announce(); });
+    window.Live.on('document.failed', (e) => { refresh(); done.failed.push(e.title || ''); announce(); });
+    window.Live.start();
   }
 
   function startApp(user, policy) {
@@ -106,6 +130,7 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && state.shell) loadCategories();
     });
+    startLive();
     shell.showInitial();
   }
 
