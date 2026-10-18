@@ -8,6 +8,7 @@ const { parsePdfPages } = require('../utils/pdfParser');
 const { provider, classifyError, AiError } = require('./aiProvider');
 const storage = require('./storageService');
 const audit = require('./auditService');
+const events = require('./eventBus');
 
 class PipelineError extends Error {
   constructor(code, message, stage = 'extract', retryable = false) {
@@ -172,6 +173,7 @@ async function processDocument(documentId) {
        failure_code = NULL, failure_reason = NULL WHERE id = ?`,
     needsExtractionStage ? 'processing' : 'not_applicable', nowIso(), documentId
   );
+  events.publishDoc('document.processing', doc);
 
   let stage = 'extract';
   let partialInfo = null;
@@ -214,6 +216,7 @@ async function processDocument(documentId) {
       action: 'document.processing_completed', doc: get('SELECT * FROM documents WHERE id = ?', documentId),
       completedAt, countsLifetime: first, detail: { chunks: embedded.length, firstCompletion: first },
     });
+    events.publishDoc('document.completed', doc, { chunks: embedded.length });
     console.log(`[Pipeline] DONE ${documentId}: ${embedded.length} chunk(s) indexed in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     return { ok: true, chunks: embedded.length };
   } catch (e) {
@@ -237,6 +240,7 @@ async function processDocument(documentId) {
       action: 'document.processing_failed', outcome: 'failed', doc: get('SELECT * FROM documents WHERE id = ?', documentId),
       failureReason: `${err.code}: ${err.message}`.slice(0, 500), detail: { code: err.code, stage: err.stage, retryable: err.retryable },
     });
+    events.publishDoc('document.failed', doc, { code: err.code, stage: err.stage });
     return { ok: false, code: err.code };
   }
 }

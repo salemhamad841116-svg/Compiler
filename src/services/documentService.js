@@ -204,7 +204,9 @@ function recordUploadFailure({ actor, ownerRef, filename, sizeBytes, categoryRef
 function insertDocument(row) {
   const cols = Object.keys(row);
   run(`INSERT INTO documents (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, ...cols.map((c) => row[c]));
-  return getDocumentRow(row.id);
+  const doc = getDocumentRow(row.id);
+  require('./eventBus').publishDoc('document.uploaded', doc);
+  return doc;
 }
 
 function findDuplicate(sha256, ownerId) {
@@ -485,6 +487,7 @@ function deleteDocument(id, actor) {
   if (d.vault_path) fileRemoved = storage.deleteFile(d.vault_path);
   audit.record({ action: 'document.deleted', actor, doc: d, detail: { chunksDeleted: snapshotChunks, vaultFileRemoved: fileRemoved } });
   require('../models/vectorDbModel').invalidateCache();
+  require('./eventBus').publishDoc('document.deleted', d);
   return { deleted: true, chunksDeleted: snapshotChunks, vaultFileRemoved: fileRemoved };
 }
 

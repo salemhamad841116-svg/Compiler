@@ -230,6 +230,20 @@ CREATE INDEX IF NOT EXISTS idx_book_pages_book ON book_pages(book_id, page_numbe
 UPDATE documents SET page_count = COALESCE(pages_total, pages_processed, 1) WHERE page_count = 0;
 `,
   },
+  {
+    id: 3,
+    name: 'phase4_system_settings',
+    sql: `
+CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value_enc TEXT,
+  is_secret INTEGER NOT NULL DEFAULT 1,
+  meta TEXT,
+  updated_at TEXT NOT NULL,
+  updated_by TEXT REFERENCES users(id)
+);
+`,
+  },
 ];
 
 function openDb() {

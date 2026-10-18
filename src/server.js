@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('./config');
 const { getDb, closeDb, get } = require('./db/database');
-const { requestContext, errorHandler, notFoundApi } = require('./auth/middleware');
+const { requestContext, errorHandler, notFoundApi, requireAuth } = require('./auth/middleware');
 
 const PUBLIC_DIR = path.join(__dirname, '../public');
 const TIER_DIRS = {
@@ -61,7 +61,7 @@ function createApp() {
       database,
       storageWritable: storage.writable,
       aiProvider: config.aiProvider,
-      aiConfigured: config.aiProvider === 'mock' ? true : config.geminiKeyUsable,
+      aiConfigured: config.aiProvider === 'mock' ? true : require('./services/settingsService').hasUsableGeminiKey(),
     });
   });
 
@@ -75,6 +75,8 @@ function createApp() {
   app.use('/api/documents', documentRoutes.docs);
   app.use('/api/me', documentRoutes.me);
   app.use('/api/locales', require('./routes/localeRoutes'));
+  // Real-time document / settings events (Server-Sent Events). Same-origin cookie auth.
+  app.get('/api/events', requireAuth(), require('./services/eventBus').sseHandler);
   app.use('/api', notFoundApi);
 
   // Shared static assets
@@ -133,9 +135,10 @@ function logAiConfiguration() {
       console.log('[AI] MOCK provider active (tests only) - no real OCR/embeddings.');
     } else {
       const d = require('./services/geminiClient').describeConfig();
-      console.log(`[AI] GEMINI_API_KEY: ${d.keyPresent ? d.keyMasked : 'MISSING'}${d.keyPresent && !d.keyUsable ? '  <-- PLACEHOLDER VALUE, every upload will fail with AI_NOT_CONFIGURED' : ''}`);
+      console.log(`[AI] env GEMINI_API_KEY: ${config.geminiApiKey ? d.keyMasked : 'MISSING'}${config.geminiApiKey && !config.geminiKeyUsable ? '  (placeholder value - ignored)' : ''}`);
+      console.log(`[AI] effective key order: ${d.keySources.length ? d.keySources.join(' -> ') : 'NONE'}  (System Settings DB slots first, then env)`);
       console.log(`[AI] models: ocr=${d.ocrModel} chat=${d.generationModel} transcribe=${d.transcriptionModel} embedding=${d.embeddingModel} (${d.embeddingDimensions} dims)`);
-      if (!d.keyUsable) console.error('[AI] ERROR: no usable GEMINI_API_KEY. Put it in .env.production or .env next to docker-compose.prod.yml and recreate the container.');
+      if (!d.keyUsable) console.error('[AI] ERROR: no usable Gemini API key. Add one in Admin > System Settings (applies immediately), or set GEMINI_API_KEY in .env/.env.production.');
     }
     console.log('[AI] ----------------------------------------------------------');
   } catch (e) {
@@ -200,6 +203,8 @@ if (require.main === module) {
   });
   const shutdown = () => {
     console.log('[Server] Shutting down...');
+    // Long-lived SSE streams would otherwise hold server.close() open until the 10 s timeout.
+    require('./services/eventBus').closeAll();
     server.close(() => {
       stopBackground();
       process.exit(0);

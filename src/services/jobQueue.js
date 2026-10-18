@@ -118,6 +118,7 @@ function retryDocument(documentId, user, { force = false, ip } = {}) {
     doc.kind === 'image' || doc.kind === 'media' ? 'pending' : 'not_applicable', documentId
   );
   const queued = enqueue(documentId);
+  require('./eventBus').publishDoc('document.queued', doc);
   audit.record({
     action: 'document.retry_requested', actor: user, doc: get('SELECT * FROM documents WHERE id = ?', documentId), ip,
     detail: { previousFailure: doc.failure_code, forced: Boolean(force) },

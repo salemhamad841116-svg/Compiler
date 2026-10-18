@@ -78,8 +78,66 @@ class GeminiHttpError extends Error {
   }
 }
 
-async function callApi(model, op, body, timeoutMs) {
-  const key = config.geminiApiKey;
+// ------------------------------------------------------------------ key rotation (Phase 4)
+// Keys come from settingsService: DB primary -> fallback1 -> fallback2 -> env.
+// We only rotate on KEY problems (quota, invalid, permission). Model 404s, network
+// errors and bad input are not key problems and are surfaced immediately.
+const COOLDOWN_RATE_LIMIT_MS = 60 * 1000;
+const COOLDOWN_INVALID_MS = 10 * 60 * 1000;
+const cooldown = new Map(); // fingerprint -> until (ms)
+
+function keyProblem(e) {
+  const msg = String((e && e.message) || '');
+  if (e instanceof GeminiHttpError && e.httpStatus === 429) return 'AI_RATE_LIMIT';
+  if (/RESOURCE_EXHAUSTED/i.test(msg)) return 'AI_RATE_LIMIT';
+  if (/API key not valid|API_KEY_INVALID|API key expired/i.test(msg)) return 'AI_KEY_INVALID';
+  if (e instanceof GeminiHttpError && e.httpStatus === 403) return 'AI_KEY_INVALID';
+  if (/PERMISSION_DENIED|leaked|SERVICE_DISABLED|API_KEY_SERVICE_BLOCKED/i.test(msg)) return 'AI_KEY_INVALID';
+  return null;
+}
+
+function settings() {
+  return require('./settingsService');
+}
+
+/**
+ * Runs fn(key) with the first healthy key, rotating to the next one on key problems.
+ * @param {(key: string) => Promise<any>} fn
+ * @param {{key?: string, label?: string}} [opts] - opts.key pins a single key (per-slot test)
+ */
+async function withKeyRotation(fn, { key, label = 'call' } = {}) {
+  if (key) return fn(key);
+  const chain = settings().getGeminiKeyChain();
+  if (!chain.length) throw new Error('GEMINI_API_KEY is not configured (no key in System Settings or environment).');
+  const now = Date.now();
+  let order = chain.filter((k) => !(cooldown.get(k.fp) > now));
+  if (!order.length) order = chain; // every key is cooling down: try them all rather than fail outright
+  let lastErr;
+  for (let i = 0; i < order.length; i++) {
+    const k = order[i];
+    try {
+      const out = await fn(k.key);
+      cooldown.delete(k.fp);
+      safeHealth(k.source, true);
+      return out;
+    } catch (e) {
+      const problem = keyProblem(e);
+      if (!problem) throw e;
+      lastErr = e;
+      cooldown.set(k.fp, Date.now() + (problem === 'AI_RATE_LIMIT' ? COOLDOWN_RATE_LIMIT_MS : COOLDOWN_INVALID_MS));
+      safeHealth(k.source, false, problem);
+      const next = order[i + 1];
+      console.warn(`[Gemini] ${label}: key ${k.source} failed (${problem}: ${e.message.slice(0, 160)})${next ? ` -> rotating to ${next.source}` : ' -> no more keys'}`);
+    }
+  }
+  throw lastErr;
+}
+
+function safeHealth(source, ok, code) {
+  try { settings().recordKeyHealth(source, ok, code); } catch (_) { /* never break a call on bookkeeping */ }
+}
+
+async function callApi(model, op, body, timeoutMs, key) {
   if (!key) throw new Error('GEMINI_API_KEY is not configured in environment variables.');
   const url = `${API_BASE}/models/${encodeURIComponent(model)}:${op}`;
   let res;
@@ -128,18 +186,23 @@ function textFromCandidates(json, model) {
  * @param {string} [o.systemInstruction]
  * @param {Object} [o.generationConfig]
  * @param {number} [o.timeoutMs]
+ * @param {string} [o.key] - pin a single API key (skips rotation; used by the per-slot test)
  */
-async function generateText({ purpose, modelEnv, parts, systemInstruction, generationConfig, timeoutMs = 180000 }) {
-  const primary = workingModel.get(purpose) || resolveGenerationModel(modelEnv);
-  const candidates = [primary, ...GENERATION_FALLBACKS.filter((m) => m !== primary)];
+async function generateText({ purpose, modelEnv, parts, systemInstruction, generationConfig, timeoutMs = 180000, key }) {
   const body = { contents: [{ role: 'user', parts }] };
   if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
   if (generationConfig) body.generationConfig = generationConfig;
+  return withKeyRotation((apiKey) => generateWithModelFallback({ purpose, modelEnv, body, timeoutMs, apiKey }), { key, label: purpose });
+}
 
+/** Tries the configured model, then GENERATION_FALLBACKS on 404, with one API key. */
+async function generateWithModelFallback({ purpose, modelEnv, body, timeoutMs, apiKey }) {
+  const primary = workingModel.get(purpose) || resolveGenerationModel(modelEnv);
+  const candidates = [primary, ...GENERATION_FALLBACKS.filter((m) => m !== primary)];
   let lastErr;
   for (const model of candidates) {
     try {
-      const json = await callApi(model, 'generateContent', body, timeoutMs);
+      const json = await callApi(model, 'generateContent', body, timeoutMs, apiKey);
       const text = textFromCandidates(json, model);
       if (model !== primary) {
         warnOnce(`fallback:${purpose}:${model}`, `[Gemini] ${purpose}: model "${primary}" unavailable, now using "${model}". Set ${modelEnv}=${model} to silence this.`);
@@ -162,9 +225,9 @@ async function generateText({ purpose, modelEnv, parts, systemInstruction, gener
  * Embeds one text with gemini-embedding-001 (Matryoshka, truncated to EMBEDDING_DIMENSIONS, default 768).
  * No cross-model fallback on purpose: vectors from different models are not comparable.
  * @param {string} text
- * @param {{taskType?: string}} [opts] RETRIEVAL_DOCUMENT for chunks, RETRIEVAL_QUERY for questions
+ * @param {{taskType?: string, key?: string}} [opts] RETRIEVAL_DOCUMENT for chunks, RETRIEVAL_QUERY for questions; key pins one API key
  */
-async function embedText(text, { taskType } = {}) {
+async function embedText(text, { taskType, key } = {}) {
   const model = resolveEmbeddingModel();
   const body = {
     model: `models/${model}`,
@@ -172,7 +235,7 @@ async function embedText(text, { taskType } = {}) {
     outputDimensionality: embeddingDimensions(),
   };
   if (taskType) body.taskType = taskType;
-  const json = await callApi(model, 'embedContent', body, 60000);
+  const json = await withKeyRotation((apiKey) => callApi(model, 'embedContent', body, 60000, apiKey), { key, label: 'embed' });
   const values = json && json.embedding && json.embedding.values;
   if (!Array.isArray(values) || !values.length) {
     throw new Error(`Invalid response received from Gemini Embedding API [${model}].`);
@@ -182,11 +245,14 @@ async function embedText(text, { taskType } = {}) {
 
 /** Non-secret summary of the effective AI configuration (used in startup logs and /health). */
 function describeConfig() {
+  let chain = [];
+  try { chain = settings().getGeminiKeyChain(); } catch (_) { /* db not ready */ }
   return {
     apiBase: API_BASE,
-    keyPresent: Boolean(config.geminiApiKey),
-    keyUsable: config.geminiKeyUsable,
+    keyPresent: chain.length > 0 || Boolean(config.geminiApiKey),
+    keyUsable: chain.length > 0,
     keyMasked: maskKey(config.geminiApiKey),
+    keySources: chain.map((k) => `${k.source}(${maskKey(k.key)})`),
     generationModel: workingModel.get('chat') || resolveGenerationModel('GEMINI_MODEL'),
     ocrModel: workingModel.get('ocr') || resolveGenerationModel('OCR_MODEL'),
     transcriptionModel: workingModel.get('transcribe') || resolveGenerationModel('TRANSCRIPTION_MODEL'),
@@ -203,6 +269,9 @@ module.exports = {
   resolveGenerationModel,
   resolveEmbeddingModel,
   GeminiHttpError,
+  withKeyRotation,
+  keyProblem,
+  _resetCooldowns: () => cooldown.clear(),
   DEFAULT_GENERATION_MODEL,
   DEFAULT_EMBEDDING_MODEL,
 };

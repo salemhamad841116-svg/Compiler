@@ -36,3 +36,10 @@ flutter_client/.flutter-plugins-dependencies
 flutter_client/.packages
 flutter_client/.pub-cache/
 flutter_client/.pub/
+
+# Runtime database & secrets
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/.settings.key
+data/tmp_uploads/

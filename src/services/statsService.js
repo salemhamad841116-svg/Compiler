@@ -1,6 +1,9 @@
 const { get, all } = require('../db/database');
 const { nowIso } = require('../utils/clock');
 
+// Admin end-to-end self-test probes are real uploads (audited) but must not inflate lifetime counters.
+const E2E_PROBE_TITLE_PREFIX = 'E2E self-test MSRQ-';
+
 function ownerClause(alias, ownerId, params) {
   if (!ownerId) return '';
   params.push(ownerId);
@@ -62,7 +65,7 @@ function overview({ ownerId = null } = {}) {
        SUM(action = 'document.processing_completed' AND counts_lifetime = 1) AS processed,
        SUM(CASE WHEN action = 'document.processing_completed' AND counts_lifetime = 1 THEN COALESCE(pages_processed, 0) ELSE 0 END) AS pages_processed,
        SUM(action = 'document.deleted') AS deleted
-     FROM audit_events WHERE 1=1${auditScope}`,
+     FROM audit_events WHERE COALESCE(title, '') NOT LIKE '${E2E_PROBE_TITLE_PREFIX}%'${auditScope}`,
     ...pa
   );
 
@@ -207,4 +210,4 @@ function ingestionAnalytics() {
   };
 }
 
-module.exports = { overview, perSupervisor, ingestionAnalytics };
+module.exports = { E2E_PROBE_TITLE_PREFIX, overview, perSupervisor, ingestionAnalytics };

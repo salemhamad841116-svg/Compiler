@@ -2,7 +2,7 @@
 // ==============================================================================
 // Live AI diagnostics. Run inside the backend container:
 //   docker exec masruq_rag_backend node scripts/ai-diagnose.js
-// Shows the effective key (masked) and models, then makes one real embedding call
+// Shows the effective key order (System Settings DB slots, then .env; masked) and models, then makes one real embedding call
 // and one real generation call, printing the exact Google error if anything fails.
 // Exit code 0 = OCR + embeddings are working.
 // ==============================================================================
@@ -14,12 +14,13 @@ const { classifyError } = require('../src/services/aiProvider');
 (async () => {
   const d = gemini.describeConfig();
   console.log('AI provider       :', config.aiProvider);
-  console.log('GEMINI_API_KEY    :', d.keyPresent ? d.keyMasked : 'MISSING', d.keyPresent && !d.keyUsable ? '(placeholder value!)' : '');
+  console.log('GEMINI_API_KEY env:', config.geminiApiKey ? d.keyMasked : 'MISSING', config.geminiApiKey && !config.geminiKeyUsable ? '(placeholder value!)' : '');
+  console.log('Key order (live)  :', d.keySources.length ? d.keySources.join(' -> ') : 'NONE (add a key in Admin > System Settings)');
   console.log('OCR model         :', d.ocrModel);
   console.log('Chat model        :', d.generationModel);
   console.log('Embedding model   :', `${d.embeddingModel} (${d.embeddingDimensions} dims)`);
   if (!d.keyUsable) {
-    console.error('\nFAIL: no usable GEMINI_API_KEY inside the container. Check env_file in docker-compose.prod.yml.');
+    console.error('\nFAIL: no usable Gemini key. Add one in Admin > System Settings, or set GEMINI_API_KEY via env_file in docker-compose.prod.yml.');
     process.exit(2);
   }
   let ok = true;

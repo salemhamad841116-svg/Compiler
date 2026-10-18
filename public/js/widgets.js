@@ -252,6 +252,7 @@
     'account.created', 'account.activated', 'account.disabled', 'account.enabled', 'account.updated', 'account.invitation_issued',
     'account.reset_link_issued', 'account.sessions_revoked', 'account.password_changed', 'account.password_reset',
     'auth.login', 'auth.logout', 'auth.login_failed', 'system.legacy_import', 'system.reconciliation_applied',
+    'settings.api_key_updated', 'settings.api_key_cleared', 'system.e2e_test',
   ];
 
   // Interpret date-time inputs as Asia/Dubai wall-clock time (UTC+4), independent of the browser zone.

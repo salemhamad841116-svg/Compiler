@@ -8,3 +8,17 @@
 .result-item p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .mini-list { margin: 8px 0 0; padding-inline-start: 18px; color: var(--muted); font-size: 0.85rem; }
+
+/* System Settings: API key slots (Phase 4) */
+.key-form { display: grid; gap: 12px; margin: 14px 0; }
+.key-slot { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.03); }
+.key-slot-env { margin-bottom: 12px; border-style: dashed; }
+.key-slot-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.key-slot-head code { font-size: 0.85rem; color: var(--muted); }
+.key-slot-head .btn { margin-inline-start: auto; }
+.key-slot-body { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.key-slot-body .input { flex: 1 1 260px; min-width: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* Empty key fields show the localized hint in the page language/font; typed keys stay LTR monospace. */
+.key-slot-body .input:placeholder-shown { direction: rtl; font-family: inherit; }
+html[dir="ltr"] .key-slot-body .input:placeholder-shown { direction: ltr; }
