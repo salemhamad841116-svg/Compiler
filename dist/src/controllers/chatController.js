@@ -1,21 +1,12 @@
-const config = require('../config');
 const { provider, classifyError } = require('../services/aiProvider');
-const { searchVectorDatabase } = require('../models/vectorDbModel');
-const { generateConstrainedAnswer } = require('../services/geminiService');
+const { searchVectorDatabase, indexCoverage } = require('../models/vectorDbModel');
 const { AppError } = require('../utils/errors');
 
 const NO_ANSWER = 'I cannot answer this question based on the books in your knowledge base.';
 
-async function answerFor(question, chunks) {
-  if (config.aiProvider === 'mock') {
-    return `Mock answer for "${question}" based on ${chunks[0].bookTitle}: ${chunks[0].chunk.slice(0, 120)}`;
-  }
-  return generateConstrainedAnswer(question, chunks);
-}
-
+/** Admin-configurable (System Settings), else RAG_SIMILARITY_THRESHOLD, else the default for open-source embeddings. */
 function defaultThreshold() {
-  const v = parseFloat(process.env.SIMILARITY_THRESHOLD);
-  return Number.isFinite(v) ? v : 0.45;
+  return require('../services/settingsService').getAiConfig().similarityThreshold;
 }
 
 /**
@@ -34,7 +25,7 @@ async function retrieveAndAnswer(question, { topK, minSimilarity, category, lang
 
   let chunks;
   try {
-    const queryEmbedding = await provider().embed(question, { taskType: 'RETRIEVAL_QUERY' });
+    const queryEmbedding = await provider().embed(question);
     chunks = await searchVectorDatabase(queryEmbedding, limit, threshold, filterOptions);
   } catch (error) {
     const c = classifyError(error);
@@ -42,10 +33,17 @@ async function retrieveAndAnswer(question, { topK, minSimilarity, category, lang
     throw new AppError(c.retryable ? 503 : 502, c.code, c.message);
   }
 
-  if (!chunks || chunks.length === 0) return { answer: NO_ANSWER, chunks: [], threshold };
+  if (!chunks || chunks.length === 0) {
+    // Nothing indexed with the active embedding model yet, but older vectors exist: the index must be rebuilt.
+    const cov = indexCoverage();
+    if (cov.active === 0 && cov.stale > 0) {
+      throw new AppError(503, 'INDEX_REBUILD_REQUIRED', 'The search index was built with a different embedding model and is being rebuilt. Please try again later.');
+    }
+    return { answer: NO_ANSWER, chunks: [], threshold };
+  }
 
   try {
-    return { answer: await answerFor(question, chunks), chunks, threshold };
+    return { answer: await provider().answer(question, chunks), chunks, threshold };
   } catch (error) {
     const c = classifyError(error);
     console.error(`[Chat] answer generation failed (${c.code}): ${c.message}`);

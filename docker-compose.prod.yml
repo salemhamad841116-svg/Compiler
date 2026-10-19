@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. Private Gemini RAG Backend & Data Vault API (api.misruq.com)
+  # 1. Private RAG Backend & Data Vault API (api.misruq.com) - open-source AI (Phase 5)
   # ----------------------------------------------------------------------------
   rag-backend:
     build:
@@ -10,7 +10,8 @@ services:
       dockerfile: Dockerfile
     container_name: masruq_rag_backend
     restart: unless-stopped
-    # Later files override earlier ones. Put the real GEMINI_API_KEY in either file on the server
+    # Later files override earlier ones. AI keys are managed in Admin > System Settings
+    # (or LLM_API_KEY in either file on the server)
     # (.env is optional; requires Docker Compose v2.24+ for the `required` flag).
     # NOTE: .env is excluded from the image by .dockerignore, so it ONLY reaches the
     # container through this env_file entry.
@@ -26,16 +27,74 @@ services:
       - DATA_VAULT_PATH=/app/data/vault
       - VECTOR_DB_PATH=/app/data/vector_store.json
       - CATEGORIES_FILE_PATH=/app/data/categories.json
+      # Local open-source AI endpoint (embeddings by default). Docker DNS: container name.
+      - LOCAL_AI_BASE_URL=http://masruq_ollama:11434/v1
+      - CLOUD_AI_PRESET=together
+      - MAX_FILE_MB=1024
+      - MAX_MEDIA_MB=1024
     volumes:
       # Permanent Production Data Lake Volume (Never lost on container restart)
       - rag_production_data:/app/data
     ports:
       - "3000:3000"
+    depends_on:
+      ollama:
+        condition: service_started
     networks:
       masruq_network:
         aliases:
           - masruq_rag_backend
           - rag-backend
+
+  # ----------------------------------------------------------------------------
+  # 1b. Local open-source AI engine (Ollama). Serves the bge-m3 embedding model on CPU,
+  #     so the whole vector index is computed on this server. Internal network only:
+  #     NO published port. Can later serve Llama locally (Option A) by adding a GPU.
+  # ----------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: masruq_ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=2
+    volumes:
+      - ollama_models:/root/.ollama
+    mem_limit: 3g
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      masruq_network:
+        aliases:
+          - masruq_ollama
+    # Option A (local Llama on a GPU VM): uncomment after installing nvidia-container-toolkit.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot: downloads the embedding model into the ollama volume on first start
+  # (~1.2 GB for bge-m3; later starts finish in seconds because the model is cached).
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: masruq_ollama_init
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://masruq_ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull bge-m3 && echo 'bge-m3 ready'"]
+    networks:
+      - masruq_network
 
   # ----------------------------------------------------------------------------
   # 2. Standalone Supervisor Data Entry Frontend (waraqa.misruq.com)
@@ -133,6 +192,9 @@ services:
 volumes:
   rag_production_data:
     name: masruq_rag_production_vault_data
+    driver: local
+  ollama_models:
+    name: masruq_ollama_models
     driver: local
 
 networks:

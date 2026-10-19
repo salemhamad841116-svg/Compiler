@@ -23,6 +23,22 @@ const presenceService = require('../src/services/presenceService');
 let baseUrl;
 let httpServer;
 
+/**
+ * Switches to the live (OpenAI-compatible) provider with only a placeholder cloud key and every role routed to
+ * the cloud, so AI calls fail fast with AI_NOT_CONFIGURED without touching the network. Returns a restore fn.
+ */
+function simulateUnconfiguredAi() {
+  const names = ['AI_PROVIDER', 'LLM_API_KEY', 'EMBED_TARGET', 'CHAT_TARGET'];
+  const saved = Object.fromEntries(names.map((n) => [n, process.env[n]]));
+  Object.assign(process.env, { AI_PROVIDER: 'openai', LLM_API_KEY: 'your_api_key_here', EMBED_TARGET: 'cloud', CHAT_TARGET: 'cloud' });
+  const settings = require('../src/services/settingsService');
+  settings.invalidate();
+  return () => {
+    for (const n of names) if (saved[n] === undefined) delete process.env[n]; else process.env[n] = saved[n];
+    settings.invalidate();
+  };
+}
+
 /** Tiny HTTP client with a cookie jar, mimicking a browser tab/device. */
 function makeClient() {
   let cookie = '';
@@ -303,13 +319,10 @@ test('acceptance: admin dashboard, supervisor auth, categories, uploads, stats, 
     // embedding failure on text
     const emb = await sup.form('/api/ingestion/upload-book', textForm('embedfail.txt', 'This will fail [[FAIL_EMBED]] always', { categoryId: catHadith.id }));
     // transient failure (provider not configured), recoverable by retry
-    process.env.AI_PROVIDER = 'gemini';
-    const savedKey = process.env.GEMINI_API_KEY;
-    process.env.GEMINI_API_KEY = 'your_api_key_here';
+    const restoreAi = simulateUnconfiguredAi();
     const transient = await sup.form('/api/ingestion/upload-book', textForm('transient.txt', 'Transient failure content about retries', { categoryId: catHadith.id }));
     await jobQueue.waitForIdle();
-    process.env.AI_PROVIDER = 'mock';
-    if (savedKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = savedKey;
+    restoreAi();
 
     const dOcr = (await sup.get(`/api/documents/${ocr.json.data.id}`)).json.data;
     assert.equal(dOcr.statuses.upload, 'stored');
@@ -574,12 +587,9 @@ test('acceptance: admin dashboard, supervisor auth, categories, uploads, stats, 
     const ok = await c.post('/api/chat/query', { question: 'Bulk document 100-5 unique value', minSimilarity: 0.1 });
     assert.equal(ok.status, 200);
     assert.ok(ok.json.sources.length > 0);
-    process.env.AI_PROVIDER = 'gemini';
-    const prevKey = process.env.GEMINI_API_KEY;
-    process.env.GEMINI_API_KEY = 'your_api_key_here';
+    const restoreAi = simulateUnconfiguredAi();
     const err = await c.post('/api/chat/query', { question: 'anything at all' });
-    process.env.AI_PROVIDER = 'mock';
-    if (prevKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = prevKey;
+    restoreAi();
     assert.equal(err.status, 502);
     assert.equal(err.json.code, 'AI_NOT_CONFIGURED');
   });

@@ -100,7 +100,7 @@ async function runSelfTest(actor, { ip, timeoutMs = 180000 } = {}) {
         const question = 'What is the secret verification code for the Misruq end-to-end self-test?';
         // Threshold 0 here so we can REPORT the real score; the check below compares it to the chat threshold.
         const { answer, chunks, threshold } = await retrieveAndAnswer(question, { topK: 5, minSimilarity: 0 });
-        const chatThreshold = (() => { const v = parseFloat(process.env.SIMILARITY_THRESHOLD); return Number.isFinite(v) ? v : 0.45; })();
+        const chatThreshold = require('./settingsService').getAiConfig().similarityThreshold;
         const top = chunks[0];
         const topIsProbe = Boolean(top && top.documentId === probeId);
         const similarity = top ? Number(top.similarity.toFixed(4)) : null;
@@ -112,6 +112,7 @@ async function runSelfTest(actor, { ip, timeoutMs = 180000 } = {}) {
           similarity,
           chatThreshold,
           usedThreshold: threshold,
+          embedModel: require('./aiProvider').provider().embedTag(),
           candidates: chunks.length,
         };
       });

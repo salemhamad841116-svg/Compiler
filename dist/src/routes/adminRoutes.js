@@ -216,7 +216,7 @@ router.post(
     if (category && category !== 'All') filterOptions.category = category;
     if (language && language !== 'All') filterOptions.language = language;
     try {
-      const emb = await provider().embed(String(query).trim(), { taskType: 'RETRIEVAL_QUERY' });
+      const emb = await provider().embed(String(query).trim());
       const parsedMin = parseFloat(minSimilarity);
       const results = await searchVectorDatabase(emb, parseInt(topK, 10) || 5, Number.isFinite(parsedMin) ? parsedMin : 0.3, filterOptions);
       res.json({ success: true, query: String(query).trim(), matchesFound: results.length, data: results });
@@ -228,27 +228,31 @@ router.post(
   })
 );
 
-// ----------------------------------------------------------- system settings: AI keys (Phase 4)
+// ----------------------------------------------------------- system settings: open-source AI (Phase 4 keys, Phase 5 routing)
 // Keys are write-only: no endpoint ever returns a stored key, only masked status (last 4 chars).
-function aiSettingsPayload() {
-  const d = require('../services/geminiClient').describeConfig();
+async function aiSettingsPayload() {
+  const { CLOUD_PRESETS, LOCAL_PRESET, ROLE_TARGETS } = require('../services/ai/presets');
+  const cfg = settings.getAiConfig();
   return {
     provider: config.aiProvider,
     keys: settings.describeKeys(),
-    models: {
-      embedding: d.embeddingModel,
-      embeddingDimensions: d.embeddingDimensions,
-      generation: d.generationModel,
-      ocr: d.ocrModel,
-      transcription: d.transcriptionModel,
+    config: cfg,
+    embedTag: provider().embedTag(),
+    presets: {
+      cloud: Object.fromEntries(Object.entries(CLOUD_PRESETS).map(([k, v]) => [k, { baseUrl: v.baseUrl, models: v.models }])),
+      local: { baseUrl: LOCAL_PRESET.baseUrl, models: LOCAL_PRESET.models },
+      roleTargets: ROLE_TARGETS,
     },
+    tools: await require('../services/ai/localTools').toolStatus(),
+    localPulls: require('../services/ai/localModels').list(),
+    index: require('../services/indexService').status(),
   };
 }
 
 router.get(
   '/settings/ai',
   asyncHandler(async (req, res) => {
-    res.json({ success: true, data: aiSettingsPayload() });
+    res.json({ success: true, data: await aiSettingsPayload() });
   })
 );
 
@@ -256,16 +260,16 @@ router.put(
   '/settings/ai/keys',
   asyncHandler(async (req, res) => {
     const { primary, fallback1, fallback2 } = req.body || {};
-    settings.setGeminiKeys({ primary, fallback1, fallback2 }, req.user, { ip: clientIp(req) });
-    res.json({ success: true, data: aiSettingsPayload() });
+    settings.setCloudKeys({ primary, fallback1, fallback2 }, req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: await aiSettingsPayload() });
   })
 );
 
 router.delete(
   '/settings/ai/keys/:slot',
   asyncHandler(async (req, res) => {
-    settings.clearGeminiKey(req.params.slot, req.user, { ip: clientIp(req) });
-    res.json({ success: true, data: aiSettingsPayload() });
+    settings.clearCloudKey(req.params.slot, req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: await aiSettingsPayload() });
   })
 );
 
@@ -273,7 +277,82 @@ router.post(
   '/settings/ai/keys/:slot/test',
   asyncHandler(async (req, res) => {
     const result = await provider().testKey(req.params.slot);
-    res.json({ success: true, data: { result, ...aiSettingsPayload() } });
+    res.json({ success: true, data: { result, ...(await aiSettingsPayload()) } });
+  })
+);
+
+router.put(
+  '/settings/ai/local-key',
+  asyncHandler(async (req, res) => {
+    settings.setLocalKey(req.body && req.body.key, req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: await aiSettingsPayload() });
+  })
+);
+
+router.delete(
+  '/settings/ai/local-key',
+  asyncHandler(async (req, res) => {
+    settings.clearLocalKey(req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: await aiSettingsPayload() });
+  })
+);
+
+router.put(
+  '/settings/ai/config',
+  asyncHandler(async (req, res) => {
+    const { embeddingChanged } = settings.updateAiConfig(req.body || {}, req.user, { ip: clientIp(req) });
+    res.json({ success: true, data: { embeddingChanged, ...(await aiSettingsPayload()) } });
+  })
+);
+
+router.get(
+  '/settings/ai/models',
+  asyncHandler(async (req, res) => {
+    const target = req.query.target === 'local' ? 'local' : req.query.target === 'cloud' ? 'cloud' : null;
+    if (!target) throw new AppError(400, 'INVALID_TARGET', 'target must be "cloud" or "local".');
+    try {
+      const models = config.aiProvider === 'mock' ? ['mock-chat', 'mock-embed'] : await require('../services/ai/openaiCompatClient').listModels(target);
+      res.json({ success: true, data: { target, models } });
+    } catch (e) {
+      const c = classifyError(e);
+      throw new AppError(c.retryable ? 503 : 502, c.code, c.message);
+    }
+  })
+);
+
+router.post(
+  '/settings/ai/roles/:role/test',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: { result: await provider().testRole(req.params.role) } });
+  })
+);
+
+router.post(
+  '/settings/ai/local/pull',
+  asyncHandler(async (req, res) => {
+    const model = String((req.body && req.body.model) || '').trim();
+    if (!model || !/^[\w.:/@+-]{1,200}$/.test(model)) throw new AppError(400, 'MODEL_REQUIRED', 'Enter a valid model name to download.');
+    const cfg = settings.getAiConfig();
+    const rec = require('../services/ai/localModels').startPull(model, { baseUrl: cfg.local.baseUrl, key: settings.getLocalKey() });
+    audit.record({ action: 'settings.local_model_pull', actor: req.user, ip: clientIp(req), detail: { model } });
+    res.status(202).json({ success: true, data: rec });
+  })
+);
+
+// ----------------------------------------------------------- search index (Phase 5)
+router.get(
+  '/index/status',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: require('../services/indexService').status() });
+  })
+);
+
+router.post(
+  '/index/rebuild',
+  asyncHandler(async (req, res) => {
+    const { mode = 'stale', dryRun = false } = req.body || {};
+    const report = await require('../services/indexService').rebuild({ mode, dryRun: dryRun === true, actor: req.user, ip: clientIp(req) });
+    res.json({ success: true, data: { report, index: require('../services/indexService').status() } });
   })
 );
 

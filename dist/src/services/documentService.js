@@ -7,8 +7,8 @@ const storage = require('./storageService');
 const audit = require('./auditService');
 const categories = require('./categoryService');
 
-const DOC_EXTS = ['.pdf', '.txt', '.md'];
-const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
+const DOC_EXTS = ['.pdf', '.epub', '.txt', '.md', '.zip'];
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.jp2'];
 const MEDIA_EXTS = ['.mp4', '.mp3', '.wav', '.m4a', '.ogg', '.webm', '.mov', '.avi'];
 
 function classifyExt(ext) {
@@ -294,8 +294,8 @@ async function storeBookImages({ files, body, actor, ip }) {
 
   for (const f of files) {
     const ext = path.extname(f.originalname).toLowerCase();
-    if (!IMAGE_EXTS.includes(ext)) {
-      fail(400, 'UNSUPPORTED_FILE_TYPE', `File "${f.originalname}" is not an allowed image format (JPG, PNG, WEBP).`);
+    if (!IMAGE_EXTS.includes(ext) && ext !== '.zip') {
+      fail(400, 'UNSUPPORTED_FILE_TYPE', `File "${f.originalname}" is not an allowed image format (JPG, PNG, WEBP, JP2, ZIP).`);
     }
     if (!f.size) fail(422, 'EMPTY_FILE', `The file "${f.originalname}" is empty.`);
   }

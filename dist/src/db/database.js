@@ -244,6 +244,18 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 `,
   },
+  {
+    // Phase 5 (open-source AI): every chunk records the embedding model that produced it.
+    // Vectors from different models are not comparable, so search only uses chunks whose
+    // model matches the active one. Existing chunks were produced by Gemini.
+    id: 4,
+    name: 'phase5_embedding_model_tag',
+    sql: `
+ALTER TABLE chunks ADD COLUMN embed_model TEXT;
+UPDATE chunks SET embed_model = 'gemini-embedding-001' WHERE embed_model IS NULL;
+CREATE INDEX IF NOT EXISTS idx_chunks_embed_model ON chunks(embed_model);
+`,
+  },
 ];
 
 function openDb() {

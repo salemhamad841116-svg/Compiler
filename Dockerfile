@@ -1,11 +1,16 @@
 # ==============================================================================
-# Production Dockerfile for Private Gemini RAG Backend & Data Vault
+# Production Dockerfile for the Private RAG Backend & Data Vault (open-source AI)
 # ==============================================================================
 
 FROM node:22-alpine AS base
 
-# Install security updates and dumb-init for proper process signal handling
-RUN apk add --no-cache dumb-init
+# dumb-init: proper process signal handling.
+# Phase 5 local AI tools (all open source, run inside this container):
+#   tesseract-ocr (+ Arabic/English data) - local OCR engine / fallback for the vision model
+#   poppler-utils (pdftoppm, pdfinfo)     - renders scanned PDF pages to images for OCR
+#   ffmpeg                                - audio extraction/splitting for Whisper, image re-encoding
+RUN apk add --no-cache dumb-init tesseract-ocr tesseract-ocr-data-ara tesseract-ocr-data-eng poppler-utils ffmpeg openjpeg-tools imagemagick \
+    && tesseract --list-langs
 
 WORKDIR /app
 

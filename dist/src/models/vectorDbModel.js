@@ -1,6 +1,6 @@
-const { all } = require('../db/database');
+const { all, get } = require('../db/database');
 
-let cache = null;
+let cache = null; // { tag, records }
 
 function invalidateCache() {
   cache = null;
@@ -11,8 +11,24 @@ function blobToFloats(blob) {
   return new Float32Array(copy.buffer, 0, Math.floor(copy.byteLength / 4));
 }
 
+/** Identity of the active embedding model; chunks from other models are not comparable. */
+function activeTag() {
+  return require('../services/aiProvider').provider().embedTag();
+}
+
+/** Chunk counts for the active model vs. other (stale) models, for completed documents. */
+function indexCoverage(tag = activeTag()) {
+  const r = get(
+    `SELECT SUM(CASE WHEN c.embed_model = ? THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN c.embed_model IS NOT ? THEN 1 ELSE 0 END) AS stale
+     FROM chunks c JOIN documents d ON d.id = c.document_id WHERE d.index_status = 'completed'`,
+    tag, tag
+  );
+  return { tag, active: (r && r.active) || 0, stale: (r && r.stale) || 0 };
+}
+
 function loadCache() {
-  if (cache) return cache;
+  const tag = activeTag();
+  if (cache && cache.tag === tag) return cache.records;
   const rows = all(
     `SELECT c.id, c.document_id, c.idx, c.page, c.text, c.embedding,
             d.title, d.language, d.kind, d.owner_id, d.category_id, d.file_type, d.size_bytes, d.uploaded_at,
@@ -21,9 +37,10 @@ function loadCache() {
      JOIN documents d ON d.id = c.document_id
      LEFT JOIN categories cat ON cat.id = d.category_id
      LEFT JOIN users u ON u.id = d.owner_id
-     WHERE d.index_status = 'completed'`
+     WHERE d.index_status = 'completed' AND c.embed_model = ?`,
+    tag
   );
-  cache = rows.map((r) => ({
+  const records = rows.map((r) => ({
     id: r.id,
     documentId: r.document_id,
     chunkIndex: r.idx,
@@ -40,7 +57,8 @@ function loadCache() {
     fileType: r.file_type,
     uploadedAt: r.uploaded_at,
   }));
-  return cache;
+  cache = { tag, records };
+  return records;
 }
 
 function cosineSimilarity(a, b) {
@@ -107,4 +125,4 @@ function getDocumentChunks(documentId) {
   }));
 }
 
-module.exports = { searchVectorDatabase, getDocumentChunks, cosineSimilarity, invalidateCache };
+module.exports = { searchVectorDatabase, getDocumentChunks, cosineSimilarity, invalidateCache, indexCoverage, activeTag };

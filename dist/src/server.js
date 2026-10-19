@@ -61,7 +61,7 @@ function createApp() {
       database,
       storageWritable: storage.writable,
       aiProvider: config.aiProvider,
-      aiConfigured: config.aiProvider === 'mock' ? true : require('./services/settingsService').hasUsableGeminiKey(),
+      aiConfigured: (() => { try { return require('./services/aiProvider').provider().available(); } catch (_) { return false; } })(),
     });
   });
 
@@ -130,15 +130,27 @@ function logAiConfiguration() {
   try {
     const envFile = path.join(__dirname, '../.env');
     console.log('[AI] ----------------------------------------------------------');
-    console.log(`[AI] provider=${config.aiProvider}  .env file inside container: ${fs.existsSync(envFile) ? 'present' : 'absent (variables must come from docker env_file/environment)'}`);
+    console.log(`[AI] provider=${config.aiProvider} (open-source models)  .env file inside container: ${fs.existsSync(envFile) ? 'present' : 'absent (variables must come from docker env_file/environment)'}`);
     if (config.aiProvider === 'mock') {
       console.log('[AI] MOCK provider active (tests only) - no real OCR/embeddings.');
     } else {
-      const d = require('./services/geminiClient').describeConfig();
-      console.log(`[AI] env GEMINI_API_KEY: ${config.geminiApiKey ? d.keyMasked : 'MISSING'}${config.geminiApiKey && !config.geminiKeyUsable ? '  (placeholder value - ignored)' : ''}`);
-      console.log(`[AI] effective key order: ${d.keySources.length ? d.keySources.join(' -> ') : 'NONE'}  (System Settings DB slots first, then env)`);
-      console.log(`[AI] models: ocr=${d.ocrModel} chat=${d.generationModel} transcribe=${d.transcriptionModel} embedding=${d.embeddingModel} (${d.embeddingDimensions} dims)`);
-      if (!d.keyUsable) console.error('[AI] ERROR: no usable Gemini API key. Add one in Admin > System Settings (applies immediately), or set GEMINI_API_KEY in .env/.env.production.');
+      const settings = require('./services/settingsService');
+      const client = require('./services/ai/openaiCompatClient');
+      const cfg = settings.getAiConfig();
+      const chain = settings.getCloudKeyChain();
+      console.log(`[AI] cloud: ${cfg.cloud.preset} @ ${client.hostOf(cfg.cloud.baseUrl)}  keys: ${chain.length ? chain.map((k) => `${k.source}(${client.maskKey(k.key)})`).join(' -> ') : 'NONE'}`);
+      console.log(`[AI] local: ${client.hostOf(cfg.local.baseUrl)}`);
+      for (const [role, r] of Object.entries(cfg.roles)) {
+        console.log(`[AI] ${role.padEnd(13)} -> ${r.target}${r.target === 'tesseract' || r.target === 'disabled' ? '' : `:${r.model}`}${role === 'vision' && r.tesseractFallback && r.target !== 'tesseract' ? ' (+ tesseract fallback)' : ''}`);
+      }
+      console.log(`[AI] embedding identity: ${settings.embedTagFor(cfg)}  similarity threshold: ${cfg.similarityThreshold}  pdf OCR: ${cfg.pdfOcr}`);
+      if (process.env.GEMINI_API_KEY) console.warn('[AI] GEMINI_API_KEY is set but no longer used (Phase 5: open-source models). You can remove it from the env file.');
+      if (!require('./services/aiProvider').provider().available()) {
+        console.error('[AI] ERROR: a role is routed to the cloud provider but no API key is set. Add one in Admin > System Settings (applies immediately), or set LLM_API_KEY.');
+      }
+      require('./services/ai/localTools').toolStatus().then((t) => {
+        console.log(`[AI] local tools: ${Object.entries(t).map(([k, v]) => `${k}=${v.available ? 'yes' : 'MISSING'}`).join(' ')}`);
+      }).catch(() => {});
     }
     console.log('[AI] ----------------------------------------------------------');
   } catch (e) {
@@ -201,6 +213,10 @@ if (require.main === module) {
     console.log(`  Data dir:   ${config.dataDir}`);
     console.log('================================================================');
   });
+  // 30-minute request timeout for massive 1GB historical book uploads
+  server.requestTimeout = 30 * 60 * 1000;
+  server.headersTimeout = 35 * 60 * 1000;
+  server.keepAliveTimeout = 65000;
   const shutdown = () => {
     console.log('[Server] Shutting down...');
     // Long-lived SSE streams would otherwise hold server.close() open until the 10 s timeout.

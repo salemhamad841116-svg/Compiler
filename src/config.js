@@ -39,18 +39,39 @@ const config = {
   get jobConcurrency() { return int('JOB_CONCURRENCY', 2); },
   get embeddingRetries() { return int('EMBEDDING_RETRIES', 2); },
   get auditRetentionDays() { return parseInt(process.env.AUDIT_RETENTION_DAYS, 10) || 0; },
-  get maxFileMb() { return int('MAX_FILE_MB', 50); },
-  get maxMediaMb() { return int('MAX_MEDIA_MB', 100); },
-  get aiProvider() { return (process.env.AI_PROVIDER || 'gemini').toLowerCase(); },
+  get maxFileMb() { return int('MAX_FILE_MB', 1024); },
+  get maxMediaMb() { return int('MAX_MEDIA_MB', 1024); },
+  /** 'mock' (tests only) or the live open-source stack (any other value; 'openai' is the documented one). */
+  get aiProvider() {
+    const v = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+    if (v === 'mock') return 'mock';
+    if (v === 'gemini') return 'gemini';
+    return 'openai';
+  },
+  get aiTmpDir() { return path.join(this.tempUploadDir, 'ai-work'); },
   get cookieName() { return 'sid'; },
   get displayTimeZone() { return 'Asia/Dubai'; },
   get isProduction() { return process.env.NODE_ENV === 'production'; },
   /**
-   * GEMINI_API_KEY with surrounding quotes / whitespace / Windows CR removed
-   * (common when the key is pasted into an env_file as KEY="..." or with CRLF line endings).
+   * Cloud AI provider key from the environment (last fallback after the System Settings keys).
+   * LLM_API_KEY, with GROQ_API_KEY / TOGETHER_API_KEY accepted as aliases. Surrounding quotes,
+   * whitespace and Windows CR are removed (common when pasted into an env_file).
    */
+  get cloudApiKey() {
+    const raw = process.env.LLM_API_KEY || process.env.GROQ_API_KEY || process.env.TOGETHER_API_KEY || '';
+    return String(raw).replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '').trim();
+  },
+  get cloudKeyUsable() {
+    const k = this.cloudApiKey;
+    return Boolean(k) && !/your_|_here|placeholder|changeme/i.test(k);
+  },
+  /** Optional key for the local endpoint (Ollama needs none; vLLM can be started with --api-key). */
+  get localApiKey() {
+    return String(process.env.LOCAL_AI_API_KEY || '').replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '').trim();
+  },
   get geminiApiKey() {
-    return String(process.env.GEMINI_API_KEY || '').replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '').trim();
+    const raw = process.env.GEMINI_API_KEY || '';
+    return String(raw).replace(/\r/g, '').trim().replace(/^['"]|['"]$/g, '').trim();
   },
   get geminiKeyUsable() {
     const k = this.geminiApiKey;

@@ -13,16 +13,16 @@ process.env.NODE_ENV = 'test';
 process.env.ADMIN_EMAIL = 'admin4@example.test';
 process.env.ADMIN_INITIAL_PASSWORD = 'AdminPass123';
 process.env.ADMIN_NAME = 'Phase4 Admin';
-process.env.GEMINI_API_KEY = 'AIzaENVFALLBACKKEY000000000000000';
+process.env.LLM_API_KEY = 'gsk_ENVFALLBACKKEY000000000000000';
 delete process.env.SETTINGS_ENCRYPTION_KEY;
 
 const server = require('../src/server');
 const settings = require('../src/services/settingsService');
 const { get } = require('../src/db/database');
 
-const PRIMARY = 'AIzaPRIMARYKEYPRIMARYKEY0000001111';
-const FALLBACK1 = 'AIzaFALLBACKONEKEYFALLBACK00002222';
-const BADKEY = 'AIzaINVALIDKEYFORMOCKPROVIDER3333';
+const PRIMARY = 'gsk_PRIMARYKEYPRIMARYKEY0000001111';
+const FALLBACK1 = 'gsk_FALLBACKONEKEYFALLBACK00002222';
+const BADKEY = 'gsk_INVALIDKEYFORMOCKPROVIDER3333';
 
 let baseUrl;
 let httpServer;
@@ -162,14 +162,15 @@ test('phase 4: API key manager, live events, end-to-end interoperability, PWA', 
     assert.equal(r.json.data.keys.env.configured, true);
     assert.equal(r.json.data.keys.env.last4, '0000');
     assert.ok(r.json.data.keys.slots.every((s) => s.status === 'empty' && !s.configured));
-    assert.ok(r.json.data.models.embedding);
+    assert.ok(r.json.data.config.roles.embeddings.model);
+    assert.ok(r.json.data.embedTag);
   });
 
   await t.test('validation errors use stable codes', async () => {
     const bad = await admin.put('/api/admin/settings/ai/keys', { primary: 'short' });
     assert.equal(bad.status, 400);
     assert.equal(bad.json.code, 'INVALID_API_KEY_FORMAT');
-    const placeholder = await admin.put('/api/admin/settings/ai/keys', { primary: 'your_gemini_api_key_here_please' });
+    const placeholder = await admin.put('/api/admin/settings/ai/keys', { primary: 'your_groq_api_key_here_please' });
     assert.equal(placeholder.json.code, 'INVALID_API_KEY_FORMAT');
     const none = await admin.put('/api/admin/settings/ai/keys', { primary: '   ' });
     assert.equal(none.json.code, 'NO_KEYS_PROVIDED');
@@ -190,12 +191,12 @@ test('phase 4: API key manager, live events, end-to-end interoperability, PWA', 
     assert.equal(k.slots[0].last4, PRIMARY.slice(-4));
     assert.equal(k.slots[0].status, 'untested');
 
-    const row = get("SELECT value_enc FROM system_settings WHERE key = 'gemini.key.primary'");
+    const row = get("SELECT value_enc FROM system_settings WHERE key = 'ai.cloud.key.primary'");
     assert.ok(row.value_enc.startsWith('v1:'));
     assert.ok(!row.value_enc.includes(PRIMARY));
 
-    // The live chain used by geminiClient reflects the change at once.
-    assert.deepEqual(settings.getGeminiKeyChain().map((c) => c.key), [PRIMARY, FALLBACK1, process.env.GEMINI_API_KEY]);
+    // The live chain used by the AI client reflects the change at once.
+    assert.deepEqual(settings.getCloudKeyChain().map((c) => c.key), [PRIMARY, FALLBACK1, process.env.LLM_API_KEY]);
 
     await adminEvents.waitFor((e) => e.type === 'settings.changed');
 

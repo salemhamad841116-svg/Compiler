@@ -12,9 +12,9 @@
   const { h, t, icon, clear, toast, toastError, describeError, fmtBytes, fmtNumber, field } = window.ui;
   const api = window.api;
 
-  const DOC_EXT = ['pdf', 'txt', 'md', 'jpg', 'jpeg', 'png', 'webp'];
-  const MAX_FILE = 50 * 1024 * 1024;
-  const MAX_MEDIA = 100 * 1024 * 1024;
+  const DOC_EXT = ['pdf', 'epub', 'txt', 'md', 'zip', 'jpg', 'jpeg', 'png', 'webp', 'jp2'];
+  const MAX_FILE = 1024 * 1024 * 1024;
+  const MAX_MEDIA = 1024 * 1024 * 1024;
   const CONCURRENCY = 3;
   const POLL_MS = 3000;
 
@@ -143,7 +143,7 @@
     // ------------------------------------------------------------------ files pane
     buildFilesPane() {
       const ctx = {};
-      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.pdf,.txt,.md,.jpg,.jpeg,.png,.webp' });
+      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.pdf,.epub,.txt,.md,.zip,.jpg,.jpeg,.png,.webp,.jp2' });
       const drop = h('div', { class: 'dropzone', tabindex: '0', role: 'button', onclick: () => input.click(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); } },
         icon('cloud-arrow-up'), h('div', { class: 'dropzone-title' }, t('up.drop_title')), h('div', { class: 'dropzone-hint' }, t('up.drop_hint')));
       ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
@@ -180,7 +180,7 @@
         const ext = extOf(file.name);
         if (!DOC_EXT.includes(ext)) { row.state = 'not_sent'; row.error = t('up.unsupported', { ext }); row.code = 'UNSUPPORTED_FILE_TYPE'; }
         else if (file.size === 0) { row.state = 'not_sent'; row.error = t('up.empty_file'); row.code = 'EMPTY_FILE'; }
-        else if (file.size > MAX_FILE) { row.state = 'not_sent'; row.error = t('up.too_large', { mb: 50 }); row.code = 'FILE_TOO_LARGE'; }
+        else if (file.size > MAX_FILE) { row.state = 'not_sent'; row.error = t('up.too_large', { mb: 1024 }); row.code = 'FILE_TOO_LARGE'; }
         this.rows.push(row);
       });
       this.renderQueue(true);
@@ -418,7 +418,7 @@
     buildBookImagesPane() {
       const ctx = {};
       const title = h('input', { class: 'input', placeholder: t('up.book_title_optional'), maxlength: '200' });
-      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.jpg,.jpeg,.png,.webp' });
+      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.jpg,.jpeg,.png,.webp,.jp2,.zip' });
       const drop = h('div', { class: 'dropzone', tabindex: '0', role: 'button', onclick: () => input.click(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); } },
         icon('images'), h('div', { class: 'dropzone-title' }, t('up.select_images')), h('div', { class: 'dropzone-hint' }, t('up.bulk_images_desc')));
       ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
@@ -460,7 +460,7 @@
       const handleFiles = (fl) => {
         const incoming = Array.from(fl || []).filter((f) => {
           const ext = extOf(f.name);
-          return ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
+          return ['jpg', 'jpeg', 'png', 'webp', 'jp2', 'zip'].includes(ext);
         });
         if (!incoming.length) return toast(t('up.unsupported', { ext: 'all' }), 'warn');
         selectedFiles = selectedFiles.concat(incoming);
@@ -529,7 +529,7 @@
           e.preventDefault();
           const f = file.files[0];
           if (!f) return;
-          if (f.size > MAX_MEDIA) return toast(t('up.too_large', { mb: 100 }), 'error');
+          if (f.size > MAX_MEDIA) return toast(t('up.too_large', { mb: 1024 }), 'error');
           const fd = new FormData();
           fd.append('mediaFile', f, f.name);
           fd.append('title', title.value);

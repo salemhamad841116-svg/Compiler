@@ -33,7 +33,7 @@ const docUpload = makeUpload(config.maxFileMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   const kind = documents.classifyExt(ext);
   if (kind === 'document' || kind === 'image') return cb(null, true);
-  return cb(Object.assign(new Error(`Unsupported file type "${ext}". Allowed: PDF, TXT, MD, JPG, PNG, WEBP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+  return cb(Object.assign(new Error(`Unsupported file type "${ext}". Allowed: PDF, EPUB, TXT, MD, ZIP, JPG, PNG, WEBP, JP2.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
 const mediaUpload = makeUpload(config.maxMediaMb, (req, file, cb) => {
@@ -45,8 +45,8 @@ const mediaUpload = makeUpload(config.maxMediaMb, (req, file, cb) => {
 const imageUpload = makeUpload(config.maxFileMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   const kind = documents.classifyExt(ext);
-  if (kind === 'image') return cb(null, true);
-  return cb(Object.assign(new Error(`Unsupported image type "${ext}". Allowed: JPG, PNG, WEBP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+  if (kind === 'image' || ext === '.zip') return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported image type "${ext}". Allowed: JPG, PNG, WEBP, JP2, ZIP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
 /** Wraps multer so failures are returned as clean JSON AND recorded as failed uploads in the audit log. */

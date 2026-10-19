@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
-const NAMESPACES = ['common', 'auth', 'acct', 'adm', 'sup', 'up', 'docs', 'act', 'stats', 'status', 'kind', 'docstatus', 'attribution', 'source', 'errors', 'presence', 'sess', 'sevent', 'sys', 'cat', 'roles', 'accstatus', 'chat', 'categories'];
+const NAMESPACES = ['common', 'auth', 'acct', 'adm', 'sup', 'up', 'docs', 'act', 'stats', 'status', 'kind', 'docstatus', 'attribution', 'source', 'errors', 'presence', 'sess', 'sevent', 'sys', 'cat', 'roles', 'accstatus', 'chat', 'categories', 'set', 'idx', 'e2e', 'live', 'pwa'];
 
 const sourceFiles = [];
 (function walk(dir) {
@@ -92,6 +92,16 @@ family('sys.f_', ['orphanVaultFiles', 'documentsMissingFile', 'documentsWithoutO
 family('sys.u_', ['orphan_file_unsupported_type', 'file_missing_from_vault', 'processing_failure_content']);
 family('up.st.', ['waiting', 'uploading', 'stored', 'processing', 'completed', 'upload_failed', 'index_failed', 'duplicate', 'not_sent']);
 family('act.status_', ['success', 'failed', 'completed', 'stored']);
+// System Settings (Phase 4 keys, Phase 5 open-source AI routing and search index)
+family('set.st_', ['ok', 'invalid', 'rate_limited', 'error', 'undecryptable', 'untested', 'empty']);
+family('set.slot_', ['primary', 'fallback1', 'fallback2', 'env']);
+family('set.preset_', ['groq', 'together', 'custom']);
+family('set.target_', ['cloud', 'local', 'tesseract', 'disabled']);
+['chat', 'vision', 'embeddings', 'transcription'].forEach((r) => { keys.add(`set.role_${r}`); keys.add(`set.role_${r}_hint`); });
+family('set.pdf_ocr_', ['auto', 'always', 'never']);
+family('set.pull_', ['running', 'done', 'failed']);
+family('idx.mode_', ['stale', 'all', 'failed']);
+family('e2e.stage_', ['upload', 'processing', 'admin_visibility', 'chat_retrieval', 'chat_answer', 'cleanup']);
 
 const widgets = fs.readFileSync(path.join(PUBLIC, 'js', 'widgets.js'), 'utf8');
 const actions = /const ACTIONS = \[([\s\S]*?)\];/.exec(widgets);

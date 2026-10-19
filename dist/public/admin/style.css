@@ -22,3 +22,29 @@
 /* Empty key fields show the localized hint in the page language/font; typed keys stay LTR monospace. */
 .key-slot-body .input:placeholder-shown { direction: rtl; font-family: inherit; }
 html[dir="ltr"] .key-slot-body .input:placeholder-shown { direction: ltr; }
+
+/* System Settings: open-source AI routing (Phase 5) */
+.sub-title { margin: 18px 0 6px; font-size: 1rem; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.role-head, .role-row { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(130px, 0.7fr) minmax(200px, 1.6fr) auto; gap: 10px; align-items: center; }
+.role-head { color: var(--muted); font-size: 0.8rem; padding: 0 14px; margin-top: 10px; }
+.role-row { padding: 12px 14px; margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.03); }
+.role-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.role-name small { flex-basis: 100%; }
+.role-model { min-width: 0; }
+.role-model .input { width: 100%; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.role-model .input:disabled { opacity: 0.45; }
+.check-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.role-result { grid-column: 1 / -1; }
+.role-result:empty { display: none; }
+.ok-text { color: #6ee7b7; }
+.err-text { color: #fca5a5; overflow-wrap: anywhere; }
+.pull-list { display: grid; gap: 6px; margin: 8px 0; }
+.pull-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pull-row progress { width: 160px; }
+.tool-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0; }
+.tool-pill { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 760px) {
+  .role-head { display: none; }
+  .role-row { grid-template-columns: 1fr; }
+}

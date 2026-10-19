@@ -89,7 +89,7 @@ function importLegacyData() {
           first.uploadedBy || null, first.createdAt || first.metadata?.uploadedAt || null, first.createdAt || null, 0
         );
         list.forEach((r, idx) => {
-          run('INSERT INTO chunks (id, document_id, idx, page, text, embedding, created_at) VALUES (?,?,?,?,?,?,?)', newId('chk'), docId, idx, null, r.chunk, toBlob(r.embedding), r.createdAt || nowIso());
+          run('INSERT INTO chunks (id, document_id, idx, page, text, embedding, created_at, embed_model) VALUES (?,?,?,?,?,?,?,?)', newId('chk'), docId, idx, null, r.chunk, toBlob(r.embedding), r.createdAt || nowIso(), 'gemini-embedding-001');
           result.chunks++;
         });
         result.documents++;

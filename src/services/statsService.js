@@ -51,9 +51,9 @@ function overview({ ownerId = null } = {}) {
     ...p2
   );
 
-  const p3 = [];
+  const p3 = [require('../models/vectorDbModel').activeTag()];
   const scope3 = ownerClause('d', ownerId, p3);
-  const chunks = get(`SELECT COUNT(*) AS n FROM chunks c JOIN documents d ON d.id = c.document_id WHERE 1=1${scope3}`, ...p3).n;
+  const chunks = get(`SELECT COUNT(*) AS n FROM chunks c JOIN documents d ON d.id = c.document_id WHERE d.index_status = 'completed' AND c.embed_model = ?${scope3}`, ...p3).n;
 
   const pa = [];
   const auditScope = ownerId ? (pa.push(ownerId), ' AND supervisor_id = ?') : '';

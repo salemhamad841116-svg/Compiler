@@ -649,8 +649,9 @@
       h('p', { class: 'muted' }, t('e2e.hint')), out);
   }
 
-  // ------------------------------------------------------------------ system settings (API keys)
+  // ------------------------------------------------------------------ system settings (Phase 5: open-source AI)
   const KEY_STATUS_CHIP = { ok: 'completed', invalid: 'failed', error: 'failed', undecryptable: 'failed', rate_limited: 'pending', untested: 'queued', empty: 'not_applicable' };
+  const ROLE_ICONS = { chat: 'comments', vision: 'eye', embeddings: 'diagram-project', transcription: 'microphone-lines' };
 
   function keyStatusChip(status) {
     return chip(KEY_STATUS_CHIP[status] || 'queued', `set.st_${status in KEY_STATUS_CHIP ? status : 'untested'}`);
@@ -660,36 +661,65 @@
     return t(src === 'env' ? 'set.slot_env' : `set.slot_${String(src).replace(/^db:/, '')}`);
   }
 
-  function buildSettings(root) {
-    const inputs = {};
-    const holder = h('div', {});
-    let busy = false;
+  function errLine(e) {
+    return e ? `${t(`errors.${e.code}`)} [${e.code}]${e.message ? ` - ${e.message}` : ''}` : '';
+  }
 
+  function selectEl(options, value, attrs = {}) {
+    const el = h('select', { class: 'input', ...attrs }, options.map(([v, label]) => h('option', { value: v }, label)));
+    el.value = value;
+    return el;
+  }
+
+  function buildSettings(root) {
+    const inputs = {}; // cloud key slots
+    const holder = h('div', {});
+    const modelLists = { cloud: null, local: null }; // fetched from GET /models (live), used as suggestions
+    let dirty = false; // any unsaved edit: background refreshes must not wipe it
+    let busy = false;
+    let pullTimer = null;
+    const markDirty = () => { dirty = true; };
+
+    async function call(fn, okMsg) {
+      try {
+        const r = await fn();
+        if (okMsg) toast(typeof okMsg === 'function' ? okMsg(r) : okMsg, 'success');
+        dirty = false;
+        if (r && r.data && r.data.keys) show(r.data); else panel.reload({ silent: true });
+        return r;
+      } catch (err) {
+        toastError(err);
+        return null;
+      }
+    }
+
+    // ---- card 1: cloud provider + API keys (Phase 4 slots, now provider-agnostic)
     async function testSlot(slot, btn) {
       btn.disabled = true;
       try {
         const r = await api.post(`/api/admin/settings/ai/keys/${slot}/test`, {});
         const res = r.data.result;
-        if (res.status === 'ok') toast(t('set.test_ok', { slot: sourceLabel(slot === 'env' ? 'env' : `db:${slot}`) }), 'success');
-        else toast(`${t('set.test_failed', { slot: sourceLabel(slot === 'env' ? 'env' : `db:${slot}`) })}: ${t(`errors.${res.error.code}`)}`, 'error', 8000);
+        const label = sourceLabel(slot === 'env' ? 'env' : `db:${slot}`);
+        if (res.status === 'ok') {
+          toast(t('set.test_ok', { slot: label }), 'success');
+          if (res.missingModels && res.missingModels.length) toast(t('set.missing_models', { list: res.missingModels.join(', ') }), 'error', 9000);
+        } else {
+          toast(`${t('set.test_failed', { slot: label })}: ${t(`errors.${res.error.code}`)}`, 'error', 8000);
+        }
         show(r.data);
       } catch (err) { toastError(err); } finally { btn.disabled = false; }
     }
 
     async function clearSlot(slot) {
       if (!(await confirmDialog({ title: t('set.clear_title'), message: t('set.clear_msg', { slot: t(`set.slot_${slot}`) }), confirmLabel: t('set.clear') }))) return;
-      try {
-        const r = await api.del(`/api/admin/settings/ai/keys/${slot}`);
-        toast(t('set.cleared_ok'), 'success');
-        show(r.data);
-      } catch (err) { toastError(err); }
+      await call(() => api.del(`/api/admin/settings/ai/keys/${slot}`), t('set.cleared_ok'));
     }
 
     function slotRow(s) {
       const input = h('input', {
         class: 'input', type: 'password', dir: 'ltr', autocomplete: 'new-password', spellcheck: 'false',
         placeholder: s.configured ? t('set.stored_ph', { last4: s.last4 || '????' }) : t('set.empty_ph'),
-        'aria-label': t(`set.slot_${s.slot}`),
+        'aria-label': t(`set.slot_${s.slot}`), oninput: markDirty,
       });
       inputs[s.slot] = input;
       const testBtn = h('button', { type: 'button', class: 'btn btn-sm', disabled: !s.configured, onclick: () => testSlot(s.slot, testBtn) }, icon('plug-circle-check'), ' ', t('set.test'));
@@ -712,9 +742,21 @@
         h('small', { class: 'muted' }, t(env.placeholder ? 'set.env_placeholder' : env.configured ? 'set.env_hint' : 'set.env_missing')));
     }
 
-    function render(d) {
-      Object.keys(inputs).forEach((k) => delete inputs[k]);
-      const wrap = h('div', {});
+    function cloudCard(d) {
+      const cfg = d.config;
+      const preset = selectEl(Object.keys(d.presets.cloud).map((k) => [k, t(`set.preset_${k}`)]), cfg.cloud.preset, { onchange: () => {
+        markDirty();
+        const def = d.presets.cloud[preset.value].baseUrl;
+        url.value = def || '';
+        url.placeholder = def || t('set.custom_url_ph');
+      } });
+      const url = h('input', { class: 'input', type: 'url', dir: 'ltr', value: cfg.cloud.baseUrl || '', placeholder: t('set.custom_url_ph'), oninput: markDirty });
+      const saveProvider = h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: async () => {
+        saveProvider.disabled = true;
+        await call(() => api.put('/api/admin/settings/ai/config', { cloud: { preset: preset.value, baseUrl: url.value.trim() } }), t('set.provider_saved'));
+        saveProvider.disabled = false;
+      } }, icon('floppy-disk'), ' ', t('set.save_provider'));
+
       const order = d.keys.effectiveOrder;
       const saveBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('floppy-disk'), ' ', t('set.save'));
       const form = h('form', { class: 'key-form', onsubmit: async (e) => {
@@ -725,29 +767,265 @@
         if (!Object.keys(body).length) { toast(t('errors.NO_KEYS_PROVIDED'), 'error'); return; }
         busy = true;
         saveBtn.disabled = true;
-        try {
-          const r = await api.put('/api/admin/settings/ai/keys', body);
-          toast(t('set.saved_ok', { n: Object.keys(body).length }), 'success');
-          show(r.data);
-        } catch (err) { toastError(err); } finally { busy = false; saveBtn.disabled = false; }
+        await call(() => api.put('/api/admin/settings/ai/keys', body), t('set.saved_ok', { n: Object.keys(body).length }));
+        busy = false;
+        saveBtn.disabled = false;
       } }, d.keys.slots.map(slotRow), h('div', { class: 'form-actions' }, saveBtn));
 
-      wrap.append(
-        h('div', { class: 'card' },
-          h('div', { class: 'toolbar' }, h('h2', {}, t('set.keys_title')), h('div', { class: 'toolbar-actions' }, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => panel.reload() }, icon('rotate-right'), ' ', t('common.refresh')))),
-          h('div', { class: 'notice' }, t('set.live_notice')),
-          d.provider === 'mock' ? h('div', { class: 'notice notice-warn' }, t('set.mock_provider')) : null,
-          form,
-          envRow(d.keys.env),
-          h('div', { class: 'stats-meta' }, order.length ? t('set.order', { list: order.map(sourceLabel).join(' ← ') }) : t('set.no_keys')),
-          h('p', { class: 'muted' }, t('set.security_note'))),
-        h('div', { class: 'card' }, h('h2', {}, t('set.models_title')), h('p', { class: 'muted' }, t('set.models_hint')),
-          h('div', { class: 'kv-grid' },
-            kv(t('set.m_embedding'), h('span', { dir: 'ltr' }, `${d.models.embedding} (${d.models.embeddingDimensions})`)),
-            kv(t('set.m_generation'), h('span', { dir: 'ltr' }, d.models.generation)),
-            kv(t('set.m_ocr'), h('span', { dir: 'ltr' }, d.models.ocr)),
-            kv(t('set.m_transcription'), h('span', { dir: 'ltr' }, d.models.transcription)))));
-      return wrap;
+      return h('div', { class: 'card' },
+        h('div', { class: 'toolbar' }, h('h2', {}, icon('cloud'), ' ', t('set.cloud_title')), h('div', { class: 'toolbar-actions' }, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => { dirty = false; panel.reload(); } }, icon('rotate-right'), ' ', t('common.refresh')))),
+        h('div', { class: 'notice' }, t('set.live_notice')),
+        d.provider === 'mock' ? h('div', { class: 'notice notice-warn' }, t('set.mock_provider')) : null,
+        h('p', { class: 'muted' }, t('set.cloud_hint')),
+        h('div', { class: 'inline-form' }, field(t('set.preset'), preset), field(t('set.base_url'), url), h('div', {}, saveProvider)),
+        h('h3', { class: 'sub-title' }, t('set.keys_title')),
+        form,
+        envRow(d.keys.env),
+        h('div', { class: 'stats-meta' }, order.length ? t('set.order', { list: order.map(sourceLabel).join(' ← ') }) : t(cfgNeedsCloud(cfg) ? 'set.no_keys' : 'set.no_keys_ok')),
+        h('p', { class: 'muted' }, t('set.security_note')));
+    }
+
+    function cfgNeedsCloud(cfg) {
+      return Object.values(cfg.roles).some((r) => r.target === 'cloud');
+    }
+
+    // ---- card 2: local engine (Ollama / vLLM)
+    function localCard(d) {
+      const cfg = d.config;
+      const url = h('input', { class: 'input', type: 'url', dir: 'ltr', value: cfg.local.baseUrl || '', placeholder: d.presets.local.baseUrl, oninput: markDirty });
+      const key = h('input', { class: 'input', type: 'password', dir: 'ltr', autocomplete: 'new-password', spellcheck: 'false', oninput: markDirty,
+        placeholder: d.keys.local.configured ? t('set.stored_ph', { last4: d.keys.local.last4 || '????' }) : t('set.local_key_ph') });
+      const status = h('div', {});
+      const saveUrl = h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: async () => {
+        saveUrl.disabled = true;
+        await call(() => api.put('/api/admin/settings/ai/config', { local: { baseUrl: url.value.trim() } }), t('set.local_saved'));
+        saveUrl.disabled = false;
+      } }, icon('floppy-disk'), ' ', t('set.save'));
+      const saveKey = h('button', { type: 'button', class: 'btn btn-sm', onclick: async () => {
+        if (!key.value.trim()) { toast(t('errors.NO_KEYS_PROVIDED'), 'error'); return; }
+        await call(() => api.put('/api/admin/settings/ai/local-key', { key: key.value.trim() }), t('set.saved_ok', { n: 1 }));
+      } }, icon('key'), ' ', t('set.save_key'));
+      const clearKey = h('button', { type: 'button', class: 'btn btn-sm btn-danger', disabled: !(d.keys.local.configured && d.keys.local.source === 'db'), onclick: async () => {
+        if (!(await confirmDialog({ title: t('set.clear_title'), message: t('set.clear_msg', { slot: t('set.local_key') }), confirmLabel: t('set.clear') }))) return;
+        await call(() => api.del('/api/admin/settings/ai/local-key'), t('set.cleared_ok'));
+      } }, icon('eraser'), ' ', t('set.clear'));
+      const testBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: () => fetchModels('local', testBtn, status) }, icon('plug-circle-check'), ' ', t('set.test_connection'));
+
+      const pullInput = h('input', { class: 'input', dir: 'ltr', placeholder: d.presets.local.models.embeddings, value: '', oninput: markDirty });
+      const pullBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: async () => {
+        const model = pullInput.value.trim() || d.presets.local.models.embeddings;
+        pullBtn.disabled = true;
+        try {
+          await api.post('/api/admin/settings/ai/local/pull', { model });
+          toast(t('set.pull_started', { model }), 'success');
+          dirty = false;
+          panel.reload({ silent: true });
+        } catch (err) { toastError(err); } finally { pullBtn.disabled = false; }
+      } }, icon('download'), ' ', t('set.pull'));
+      const pulls = (d.localPulls || []).map((p) => {
+        const pct = p.total ? Math.round((p.completed / p.total) * 100) : null;
+        return h('div', { class: 'pull-row' },
+          h('code', { dir: 'ltr' }, p.model),
+          chip(p.status === 'done' ? 'completed' : p.status === 'failed' ? 'failed' : 'processing', `set.pull_${p.status}`),
+          p.status === 'running' && pct !== null ? h('progress', { max: 100, value: pct }) : null,
+          p.status === 'running' && pct !== null ? h('span', { dir: 'ltr' }, `${pct}%`) : null,
+          p.error ? h('small', { class: 'muted', dir: 'ltr' }, p.error) : null);
+      });
+
+      const tools = Object.entries(d.tools || {}).map(([name, v]) => h('span', { class: 'tool-pill' },
+        chip(v.available ? 'completed' : 'failed', v.available ? 'set.tool_ok' : 'set.tool_missing'), ' ', h('code', { dir: 'ltr' }, name)));
+
+      return h('div', { class: 'card' },
+        h('h2', {}, icon('server'), ' ', t('set.local_title')),
+        h('p', { class: 'muted' }, t('set.local_hint')),
+        h('div', { class: 'inline-form' }, field(t('set.base_url'), url), h('div', { class: 'btn-row' }, saveUrl, testBtn)),
+        h('div', { class: 'inline-form' }, field(t('set.local_key'), key, t('set.local_key_hint')), h('div', { class: 'btn-row' }, saveKey, clearKey)),
+        status,
+        h('h3', { class: 'sub-title' }, t('set.pull_title')),
+        h('p', { class: 'muted' }, t('set.pull_hint')),
+        h('div', { class: 'inline-form' }, field(t('set.model'), pullInput), h('div', {}, pullBtn)),
+        pulls.length ? h('div', { class: 'pull-list' }, pulls) : null,
+        h('h3', { class: 'sub-title' }, t('set.tools_title')),
+        h('div', { class: 'tool-list' }, tools),
+        h('p', { class: 'muted' }, t('set.tools_hint')));
+    }
+
+    async function fetchModels(target, btn, out) {
+      if (btn) btn.disabled = true;
+      try {
+        const r = await api.get(`/api/admin/settings/ai/models?target=${target}`);
+        modelLists[target] = r.data.models;
+        refreshDatalists();
+        if (out) {
+          clear(out);
+          out.appendChild(h('div', { class: 'notice notice-ok' }, t('set.connection_ok', { n: fmtNumber(r.data.models.length) }),
+            r.data.models.length ? h('div', { class: 'muted', dir: 'ltr' }, r.data.models.slice(0, 30).join(' · ')) : null));
+        }
+        return r.data.models;
+      } catch (err) {
+        if (out) { clear(out); out.appendChild(h('div', { class: 'notice notice-warn' }, `${t('set.connection_failed')}: ${describeError(err)}`)); }
+        else toastError(err);
+        return null;
+      } finally { if (btn) btn.disabled = false; }
+    }
+
+    // ---- card 3: model routing per role
+    const datalists = {};
+    let lastData = null;
+    function refreshDatalists() {
+      if (!lastData) return;
+      Object.entries(datalists).forEach(([role, { list, target }]) => {
+        const tg = target();
+        const preset = tg === 'local' ? lastData.presets.local.models : tg === 'cloud' ? (lastData.presets.cloud[lastData.config.cloud.preset] || {}).models || {} : {};
+        const names = new Set([preset[role], ...(modelLists[tg] || [])].filter(Boolean));
+        clear(list);
+        names.forEach((n) => list.appendChild(h('option', { value: n })));
+      });
+    }
+
+    function routingCard(d) {
+      const cfg = d.config;
+      const rows = {};
+      const roleRow = (role) => {
+        const r = cfg.roles[role];
+        const targets = d.presets.roleTargets[role];
+        const target = selectEl(targets.map((x) => [x, t(`set.target_${x}`)]), r.target, { 'aria-label': t('set.target') });
+        const listId = `models-${role}`;
+        const list = h('datalist', { id: listId });
+        const model = h('input', { class: 'input', dir: 'ltr', value: r.model || '', list: listId, spellcheck: 'false', 'aria-label': t('set.model'), oninput: markDirty });
+        datalists[role] = { list, target: () => target.value };
+        const fallback = role === 'vision' ? h('input', { type: 'checkbox', checked: r.tesseractFallback ? true : null, onchange: markDirty }) : null;
+        const syncModelState = () => {
+          const noModel = target.value === 'tesseract' || target.value === 'disabled';
+          model.disabled = noModel;
+          if (fallback) fallback.disabled = target.value === 'tesseract';
+        };
+        target.addEventListener('change', () => {
+          markDirty();
+          const preset = target.value === 'local' ? d.presets.local.models : target.value === 'cloud' ? (d.presets.cloud[cfg.cloud.preset] || {}).models || {} : {};
+          if (preset[role] !== undefined) model.value = preset[role] || '';
+          syncModelState();
+          refreshDatalists();
+        });
+        syncModelState();
+        const result = h('div', { class: 'role-result' });
+        const testBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: async () => {
+          testBtn.disabled = true;
+          clear(result);
+          try {
+            const res = (await api.post(`/api/admin/settings/ai/roles/${role}/test`, {})).data.result;
+            result.appendChild(res.status === 'ok'
+              ? h('small', { class: 'ok-text' }, icon('circle-check'), ' ', t('set.role_ok', { ms: fmtNumber(res.ms) }), res.dimensions ? ` · ${t('set.dimensions', { n: res.dimensions })}` : '')
+              : h('small', { class: 'err-text', dir: 'auto' }, icon('triangle-exclamation'), ' ', errLine(res.error)));
+          } catch (err) { toastError(err); } finally { testBtn.disabled = false; }
+        } }, icon('vial'), ' ', t('set.test'));
+        rows[role] = { target, model, fallback };
+        return h('div', { class: 'role-row' },
+          h('div', { class: 'role-name' }, icon(ROLE_ICONS[role]), ' ', h('strong', {}, t(`set.role_${role}`)), h('small', { class: 'muted' }, t(`set.role_${role}_hint`))),
+          target, h('div', { class: 'role-model' }, model, list), testBtn,
+          fallback ? h('label', { class: 'check-row' }, fallback, ' ', t('set.tesseract_fallback')) : null,
+          result);
+      };
+      const pdfOcr = selectEl(['auto', 'always', 'never'].map((m) => [m, t(`set.pdf_ocr_${m}`)]), cfg.pdfOcr, { onchange: markDirty });
+      const saveBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: async () => {
+        const roles = {};
+        Object.entries(rows).forEach(([role, x]) => {
+          roles[role] = { target: x.target.value, model: x.model.value.trim() };
+          if (x.fallback) roles[role].tesseractFallback = x.fallback.checked;
+        });
+        const prevEmbed = `${cfg.roles.embeddings.target}:${cfg.roles.embeddings.model}`;
+        const nextEmbed = `${roles.embeddings.target}:${roles.embeddings.model}`;
+        if (prevEmbed !== nextEmbed && d.index.chunksActive > 0
+          && !(await confirmDialog({ title: t('set.embed_change_title'), message: t('set.embed_change_msg'), confirmLabel: t('set.save_routing') }))) return;
+        saveBtn.disabled = true;
+        const r = await call(() => api.put('/api/admin/settings/ai/config', { roles, pdfOcr: pdfOcr.value }), t('set.routing_saved'));
+        if (r && r.data.embeddingChanged) toast(t('set.embed_changed_notice'), 'error', 10000);
+        saveBtn.disabled = false;
+      } }, icon('floppy-disk'), ' ', t('set.save_routing'));
+      const loadBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: async () => {
+        loadBtn.disabled = true;
+        await Promise.all([cfgNeedsCloud(cfg) || d.keys.effectiveOrder.length ? fetchModels('cloud') : null, fetchModels('local')]);
+        loadBtn.disabled = false;
+      } }, icon('list'), ' ', t('set.load_models'));
+      const card = h('div', { class: 'card' },
+        h('div', { class: 'toolbar' }, h('h2', {}, icon('route'), ' ', t('set.routing_title')), h('div', { class: 'toolbar-actions' }, loadBtn)),
+        h('p', { class: 'muted' }, t('set.routing_hint')),
+        h('div', { class: 'role-head' }, h('span', {}, t('set.role')), h('span', {}, t('set.target')), h('span', {}, t('set.model')), h('span', {})),
+        ['chat', 'vision', 'embeddings', 'transcription'].map(roleRow),
+        h('div', { class: 'inline-form' }, field(t('set.pdf_ocr'), pdfOcr, t('set.pdf_ocr_hint'))),
+        h('div', { class: 'form-actions' }, saveBtn));
+      refreshDatalists();
+      return card;
+    }
+
+    // ---- card 4: search index (embedding model identity, stale vectors, rebuild)
+    function rebuildReport(rep) {
+      const p = rep.preflight || {};
+      return h('div', { class: `notice ${p.ok ? 'notice-ok' : 'notice-warn'}` },
+        h('div', {}, rep.dryRun ? t('idx.dry_title') : t('idx.done_title')),
+        h('div', {}, p.ok ? t('idx.preflight_ok', { n: p.dimensions, ms: fmtNumber(p.ms) }) : `${t('idx.preflight_failed')}: ${errLine(p)}`),
+        h('div', {}, rep.dryRun
+          ? t('idx.would', { docs: fmtNumber(rep.documents - rep.skipped), chunks: fmtNumber(rep.chunksToPurge) })
+          : t('idx.did', { docs: fmtNumber(rep.queued), chunks: fmtNumber(rep.chunksPurged) })),
+        rep.skipped ? h('div', { class: 'muted' }, t('idx.skipped', { n: fmtNumber(rep.skipped) }), h('ul', { class: 'mini-list' }, rep.skippedDetails.slice(0, 10).map((s) => h('li', { dir: 'auto' }, `${s.title || s.id}: ${t(`errors.${s.code}`)}`)))) : null);
+    }
+
+    function indexCard(d) {
+      const ix = d.index;
+      const out = h('div', {});
+      const mode = selectEl(['stale', 'all', 'failed'].map((m) => [m, t(`idx.mode_${m}`)]), 'stale', { 'aria-label': t('idx.mode') });
+      const run = async (dryRun, btn) => {
+        if (!dryRun && !(await confirmDialog({ title: t('idx.confirm_title'), message: t('idx.confirm_msg', { model: ix.activeModel }), confirmLabel: t('idx.rebuild'), kind: 'primary' }))) return;
+        btn.disabled = true;
+        clear(out);
+        out.appendChild(window.ui.loadingBox());
+        try {
+          const r = await api.post('/api/admin/index/rebuild', { mode: mode.value, dryRun });
+          clear(out);
+          out.appendChild(rebuildReport(r.data.report));
+          if (!dryRun) toast(t('idx.started', { n: fmtNumber(r.data.report.queued) }), 'success');
+          if (!dryRun && state.stats) state.stats.reload({ silent: true });
+        } catch (err) {
+          clear(out);
+          out.appendChild(h('div', { class: 'notice notice-warn' }, describeError(err), err.data && err.data.preflight ? h('div', { class: 'muted', dir: 'ltr' }, err.data.preflight.message) : null));
+        } finally { btn.disabled = false; }
+      };
+      const dryBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: () => run(true, dryBtn) }, icon('magnifying-glass-chart'), ' ', t('idx.dry_run'));
+      const goBtn = h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => run(false, goBtn) }, icon('arrows-rotate'), ' ', t('idx.rebuild'));
+      const threshold = h('input', { class: 'input', type: 'number', min: '0.05', max: '0.95', step: '0.01', dir: 'ltr', value: String(d.config.similarityThreshold), oninput: markDirty });
+      const saveTh = h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: async () => {
+        await call(() => api.put('/api/admin/settings/ai/config', { similarityThreshold: threshold.value }), t('idx.threshold_saved'));
+      } }, icon('floppy-disk'), ' ', t('set.save'));
+      const last = ix.lastRebuild;
+      return h('div', { class: 'card' },
+        h('div', { class: 'toolbar' }, h('h2', {}, icon('database'), ' ', t('idx.title')), h('div', { class: 'toolbar-actions' }, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => { dirty = false; panel.reload(); } }, icon('rotate-right'), ' ', t('common.refresh')))),
+        h('p', { class: 'muted' }, t('idx.hint')),
+        ix.chunksStale > 0 ? h('div', { class: 'notice notice-warn' }, t('idx.stale_notice', { n: fmtNumber(ix.documents.stale) })) : null,
+        h('div', { class: 'kv-grid' },
+          kv(t('idx.active_model'), h('code', { dir: 'ltr' }, ix.activeModel)),
+          kv(t('idx.chunks_active'), fmtNumber(ix.chunksActive)),
+          kv(t('idx.chunks_stale'), fmtNumber(ix.chunksStale)),
+          kv(t('idx.docs_searchable'), `${fmtNumber(ix.documents.searchable)} / ${fmtNumber(ix.documents.total)}`),
+          kv(t('idx.docs_failed'), fmtNumber(ix.documents.failed)),
+          kv(t('idx.docs_in_progress'), fmtNumber(ix.documents.inProgress))),
+        ix.byModel.length > 1 ? h('div', { class: 'stats-meta', dir: 'ltr' }, ix.byModel.map((m) => `${m.model}: ${fmtNumber(m.chunks)}`).join(' · ')) : null,
+        last ? h('div', { class: 'stats-meta' }, t('idx.last', { time: fmtDateTime(last.at), mode: t(`idx.mode_${last.mode}`), queued: fmtNumber(last.queued), name: last.by || '-' })) : null,
+        h('div', { class: 'inline-form' }, field(t('idx.threshold'), threshold, t('idx.threshold_hint')), h('div', {}, saveTh)),
+        h('h3', { class: 'sub-title' }, t('idx.rebuild_title')),
+        h('p', { class: 'muted' }, t('idx.rebuild_hint')),
+        h('div', { class: 'filter-row' }, mode, dryBtn, goBtn),
+        out);
+    }
+
+    function render(d) {
+      lastData = d;
+      Object.keys(inputs).forEach((k) => delete inputs[k]);
+      Object.keys(datalists).forEach((k) => delete datalists[k]);
+      dirty = false;
+      // keep polling while a local model download is running
+      clearTimeout(pullTimer);
+      if ((d.localPulls || []).some((p) => p.status === 'running')) pullTimer = setTimeout(() => state.settingsPanel && state.settingsPanel.reload({ silent: true }), 3000);
+      return h('div', {}, cloudCard(d), routingCard(d), localCard(d), indexCard(d));
     }
 
     function show(d) {
@@ -758,8 +1036,8 @@
     const panel = createPanel(holder, () => api.get('/api/admin/settings/ai').then((r) => r.data), render);
     root.appendChild(holder);
     panel.reload();
-    // Background refreshes (live events, section switch) never wipe a key the admin is still typing.
-    state.settingsPanel = { reload: (o) => (Object.values(inputs).some((el) => el.value) ? null : panel.reload(o)) };
+    // Background refreshes (live events, section switch, pull polling) never wipe what the admin is still editing.
+    state.settingsPanel = { reload: (o) => (dirty || Object.values(inputs).some((el) => el.value) ? null : panel.reload(o)) };
   }
 
   // ------------------------------------------------------------------ app
