@@ -11,11 +11,18 @@ const DOC_EXTS = ['.pdf', '.epub', '.txt', '.md', '.zip'];
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.jp2'];
 const MEDIA_EXTS = ['.mp4', '.mp3', '.wav', '.m4a', '.ogg', '.webm', '.mov', '.avi'];
 
-function classifyExt(ext) {
+function classifyExt(ext, mimeType) {
   const e = String(ext || '').toLowerCase();
   if (DOC_EXTS.includes(e)) return 'document';
   if (IMAGE_EXTS.includes(e)) return 'image';
   if (MEDIA_EXTS.includes(e)) return 'media';
+  const m = String(mimeType || '').toLowerCase();
+  if (m === 'application/epub+zip' || m === 'application/x-epub' || m.includes('epub')) return 'document';
+  if (m === 'application/pdf') return 'document';
+  if (m === 'text/plain' || m === 'text/markdown') return 'document';
+  if (m === 'application/zip' || m === 'application/x-zip-compressed' || m === 'application/x-zip') return 'document';
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/') || m.startsWith('audio/')) return 'media';
   return null;
 }
 
@@ -215,8 +222,13 @@ function findDuplicate(sha256, ownerId) {
 
 /** Persists an uploaded multipart file into the vault + database BEFORE any slow processing. */
 async function storeUploadedFile({ file, body, actor, ip }) {
-  const ext = path.extname(file.originalname).toLowerCase();
-  const kind = classifyExt(ext);
+  let ext = path.extname(file.originalname).toLowerCase();
+  const mime = String(file.mimetype || '').toLowerCase();
+  if (!ext && (mime === 'application/epub+zip' || mime === 'application/x-epub' || mime.includes('epub'))) {
+    ext = '.epub';
+    file.originalname = `${file.originalname}.epub`;
+  }
+  const kind = classifyExt(ext, mime);
   const owner = resolveOwner(actor, body.supervisorId);
   const cleanup = () => storage.removeTemp(file.path);
   const fail = (status, code, message) => {
@@ -224,7 +236,7 @@ async function storeUploadedFile({ file, body, actor, ip }) {
     recordUploadFailure({ actor, ownerRef: body.supervisorId, filename: file.originalname, sizeBytes: file.size, categoryRef: body.categoryId || body.category, batchId: body.batchId, code, reason: message, ip, kind, fileType: ext.replace('.', '') });
     throw new AppError(status, code, message);
   };
-  if (!kind) fail(400, 'UNSUPPORTED_FILE_TYPE', `Unsupported file type "${ext}".`);
+  if (!kind) fail(400, 'UNSUPPORTED_FILE_TYPE', `Unsupported file type "${ext || mime}".`);
   if (body._expectKind && body._expectKind !== kind && !(body._expectKind === 'document' && kind === 'image')) {
     fail(400, 'WRONG_ENDPOINT', 'This file type is not accepted by this upload channel.');
   }
@@ -294,7 +306,9 @@ async function storeBookImages({ files, body, actor, ip }) {
 
   for (const f of files) {
     const ext = path.extname(f.originalname).toLowerCase();
-    if (!IMAGE_EXTS.includes(ext) && ext !== '.zip') {
+    const mime = String(f.mimetype || '').toLowerCase();
+    const isImage = IMAGE_EXTS.includes(ext) || ext === '.zip' || mime.startsWith('image/') || mime.includes('zip');
+    if (!isImage) {
       fail(400, 'UNSUPPORTED_FILE_TYPE', `File "${f.originalname}" is not an allowed image format (JPG, PNG, WEBP, JP2, ZIP).`);
     }
     if (!f.size) fail(422, 'EMPTY_FILE', `The file "${f.originalname}" is empty.`);

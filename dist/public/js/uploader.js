@@ -13,12 +13,36 @@
   const api = window.api;
 
   const DOC_EXT = ['pdf', 'epub', 'txt', 'md', 'zip', 'jpg', 'jpeg', 'png', 'webp', 'jp2'];
+  const DOC_MIMES = [
+    'application/epub+zip',
+    'application/x-epub',
+    'application/pdf',
+    'text/plain',
+    'text/markdown',
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/x-zip',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/jp2',
+  ];
   const MAX_FILE = 1024 * 1024 * 1024;
   const MAX_MEDIA = 1024 * 1024 * 1024;
   const CONCURRENCY = 3;
   const POLL_MS = 3000;
 
-  const extOf = (name) => (name.includes('.') ? name.split('.').pop().toLowerCase() : '');
+  const extOf = (name) => (name && name.includes('.') ? name.split('.').pop().toLowerCase().trim() : '');
+  const isAllowedDoc = (file) => {
+    const ext = extOf(file.name || '');
+    const mime = String(file.type || '').toLowerCase();
+    if (DOC_EXT.includes(ext)) return true;
+    if (DOC_MIMES.includes(mime)) return true;
+    if (mime.includes('epub')) return true;
+    if (mime.includes('pdf')) return true;
+    if (mime.startsWith('image/')) return true;
+    return false;
+  };
 
   class Uploader {
     /**
@@ -143,7 +167,12 @@
     // ------------------------------------------------------------------ files pane
     buildFilesPane() {
       const ctx = {};
-      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.pdf,.epub,.txt,.md,.zip,.jpg,.jpeg,.png,.webp,.jp2' });
+      const input = h('input', {
+        type: 'file',
+        multiple: true,
+        hidden: true,
+        accept: '.pdf,application/pdf,.epub,application/epub+zip,application/x-epub,.txt,text/plain,.md,text/markdown,.zip,application/zip,application/x-zip-compressed,.jpg,.jpeg,image/jpeg,.png,image/png,.webp,image/webp,.jp2,image/jp2',
+      });
       const drop = h('div', { class: 'dropzone', tabindex: '0', role: 'button', onclick: () => input.click(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); } },
         icon('cloud-arrow-up'), h('div', { class: 'dropzone-title' }, t('up.drop_title')), h('div', { class: 'dropzone-hint' }, t('up.drop_hint')));
       ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
@@ -177,8 +206,13 @@
       }
       files.forEach((file) => {
         const row = { id: ++this.seq, file, state: 'waiting', progress: 0, docId: null, error: null, code: null };
-        const ext = extOf(file.name);
-        if (!DOC_EXT.includes(ext)) { row.state = 'not_sent'; row.error = t('up.unsupported', { ext }); row.code = 'UNSUPPORTED_FILE_TYPE'; }
+        const ext = extOf(file.name || '');
+        const mime = String(file.type || '').toLowerCase();
+        if (!isAllowedDoc(file)) {
+          row.state = 'not_sent';
+          row.error = t('up.unsupported', { ext: ext || mime || 'unknown' });
+          row.code = 'UNSUPPORTED_FILE_TYPE';
+        }
         else if (file.size === 0) { row.state = 'not_sent'; row.error = t('up.empty_file'); row.code = 'EMPTY_FILE'; }
         else if (file.size > MAX_FILE) { row.state = 'not_sent'; row.error = t('up.too_large', { mb: 1024 }); row.code = 'FILE_TOO_LARGE'; }
         this.rows.push(row);
@@ -299,8 +333,12 @@
       r.error = null;
       r.code = null;
       this.updateRow(r);
-      const fd = new FormData();
-      fd.append('bookFile', r.file, r.file.name);
+      let fileName = r.file.name || 'document';
+      const fileMime = String(r.file.type || '').toLowerCase();
+      if (!extOf(fileName) && (fileMime === 'application/epub+zip' || fileMime.includes('epub'))) {
+        fileName = `${fileName}.epub`;
+      }
+      fd.append('bookFile', r.file, fileName);
       fd.append('categoryId', ctx.category.value);
       fd.append('language', ctx.language.value);
       fd.append('batchId', this.batch.id);
@@ -418,7 +456,7 @@
     buildBookImagesPane() {
       const ctx = {};
       const title = h('input', { class: 'input', placeholder: t('up.book_title_optional'), maxlength: '200' });
-      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.jpg,.jpeg,.png,.webp,.jp2,.zip' });
+      const input = h('input', { type: 'file', multiple: true, hidden: true, accept: '.jpg,.jpeg,image/jpeg,.png,image/png,.webp,image/webp,.jp2,image/jp2,.zip,application/zip,application/x-zip-compressed' });
       const drop = h('div', { class: 'dropzone', tabindex: '0', role: 'button', onclick: () => input.click(), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); } },
         icon('images'), h('div', { class: 'dropzone-title' }, t('up.select_images')), h('div', { class: 'dropzone-hint' }, t('up.bulk_images_desc')));
       ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
@@ -460,7 +498,8 @@
       const handleFiles = (fl) => {
         const incoming = Array.from(fl || []).filter((f) => {
           const ext = extOf(f.name);
-          return ['jpg', 'jpeg', 'png', 'webp', 'jp2', 'zip'].includes(ext);
+          const mime = String(f.type || '').toLowerCase();
+          return ['jpg', 'jpeg', 'png', 'webp', 'jp2', 'zip'].includes(ext) || mime.startsWith('image/') || mime.includes('zip');
         });
         if (!incoming.length) return toast(t('up.unsupported', { ext: 'all' }), 'warn');
         selectedFiles = selectedFiles.concat(incoming);

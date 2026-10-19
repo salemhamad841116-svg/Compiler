@@ -31,22 +31,25 @@ function makeUpload(maxMb, filter) {
 
 const docUpload = makeUpload(config.maxFileMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  const kind = documents.classifyExt(ext);
-  if (kind === 'document' || kind === 'image') return cb(null, true);
-  return cb(Object.assign(new Error(`Unsupported file type "${ext}". Allowed: PDF, EPUB, TXT, MD, ZIP, JPG, PNG, WEBP, JP2.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+  const mime = String(file.mimetype || '').toLowerCase();
+  const kind = documents.classifyExt(ext, mime);
+  if (kind === 'document' || kind === 'image' || mime === 'application/epub+zip' || mime === 'application/x-epub' || mime.includes('epub')) return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported file type "${ext || mime}". Allowed: PDF, EPUB, TXT, MD, ZIP, JPG, PNG, WEBP, JP2.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
 const mediaUpload = makeUpload(config.maxMediaMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (documents.classifyExt(ext) === 'media') return cb(null, true);
-  return cb(Object.assign(new Error(`Unsupported media type "${ext}".`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+  const mime = String(file.mimetype || '').toLowerCase();
+  if (documents.classifyExt(ext, mime) === 'media' || mime.startsWith('video/') || mime.startsWith('audio/')) return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported media type "${ext || mime}".`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
 const imageUpload = makeUpload(config.maxFileMb, (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  const kind = documents.classifyExt(ext);
-  if (kind === 'image' || ext === '.zip') return cb(null, true);
-  return cb(Object.assign(new Error(`Unsupported image type "${ext}". Allowed: JPG, PNG, WEBP, JP2, ZIP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
+  const mime = String(file.mimetype || '').toLowerCase();
+  const kind = documents.classifyExt(ext, mime);
+  if (kind === 'image' || ext === '.zip' || mime.startsWith('image/') || mime.includes('zip')) return cb(null, true);
+  return cb(Object.assign(new Error(`Unsupported image type "${ext || mime}". Allowed: JPG, PNG, WEBP, JP2, ZIP.`), { status: 400, code: 'UNSUPPORTED_FILE_TYPE' }));
 });
 
 /** Wraps multer so failures are returned as clean JSON AND recorded as failed uploads in the audit log. */

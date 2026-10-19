@@ -31,6 +31,9 @@ test('Phase 5 - 1GB Limits and Format Whitelisting', async (t) => {
     assert.equal(documents.classifyExt('.JP2'), 'image');
     assert.equal(documents.classifyExt('.txt'), 'document');
     assert.equal(documents.classifyExt('.pdf'), 'document');
+    assert.equal(documents.classifyExt('', 'application/epub+zip'), 'document');
+    assert.equal(documents.classifyExt('.bin', 'application/epub+zip'), 'document');
+    assert.equal(documents.classifyExt(null, 'application/x-epub'), 'document');
   });
 
   await t.test('Natural sort compares filenames with numbers correctly', () => {

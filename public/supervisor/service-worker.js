@@ -3,7 +3,7 @@
 // Bump `version` on every release so clients drop old caches.
 self.SW_CONFIG = {
   app: 'waraqa',
-  version: '5.1.0',
+  version: '5.2.0',
   offlineShell: false, // signed-in portal: show the offline screen instead of a shell that cannot authenticate
   shell: [
     './',

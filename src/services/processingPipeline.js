@@ -313,9 +313,9 @@ async function extract(doc, abs) {
 
   if (doc.kind === 'document' && doc.file_type === 'pdf') {
     await extractPdf(doc, abs, info, sections);
-  } else if (doc.kind === 'document' && doc.file_type === 'epub') {
+  } else if (doc.kind === 'document' && (doc.file_type === 'epub' || doc.mime_type === 'application/epub+zip' || (doc.mime_type && doc.mime_type.includes('epub')))) {
     await extractEpub(doc, abs, info, sections);
-  } else if (doc.kind === 'document' && doc.file_type === 'zip') {
+  } else if (doc.kind === 'document' && (doc.file_type === 'zip' || doc.mime_type === 'application/zip' || doc.mime_type === 'application/x-zip-compressed')) {
     await extractZip(doc, abs, info, sections);
   } else if (doc.kind === 'document') {
     const text = fs.readFileSync(abs, 'utf-8').trim();
