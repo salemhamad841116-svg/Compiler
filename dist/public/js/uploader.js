@@ -167,6 +167,8 @@
     // ------------------------------------------------------------------ files pane
     buildFilesPane() {
       const ctx = {};
+      const title = h('input', { class: 'input', placeholder: t('up.book_title_optional'), maxlength: '200' });
+      ctx.title = title;
       const input = h('input', {
         type: 'file',
         multiple: true,
@@ -190,6 +192,7 @@
       this.clearBtn = h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => this.clearQueue() }, icon('trash-can'), ' ', t('up.clear'));
       return h('div', { class: 'card' },
         h('p', { class: 'card-desc' }, t('up.files_desc')),
+        field(t('up.book_title_optional'), ctx.title),
         this.metaFields(ctx), drop, input,
         h('div', { class: 'queue-actions' }, this.startBtn, this.retryUploadBtn, this.retryIndexBtn, this.clearBtn),
         this.summaryEl, this.progressEl, this.listEl);
@@ -225,6 +228,7 @@
       clearInterval(this.pollTimer);
       this.rows = [];
       this.batch = null;
+      if (this._ctx && this._ctx.title) this._ctx.title.value = '';
       this.renderQueue(true);
     }
 
@@ -317,7 +321,15 @@
       const worker = async () => {
         while (queue.length) {
           const r = queue.shift();
-          await this.uploadRow(r, ctx);
+          try {
+            await this.uploadRow(r, ctx);
+          } catch (rowErr) {
+            console.error('Upload worker row error:', rowErr);
+            r.state = 'upload_failed';
+            r.error = describeError(rowErr);
+            this.updateRow(r);
+            this.updateSummary();
+          }
         }
       };
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
@@ -333,18 +345,29 @@
       r.error = null;
       r.code = null;
       this.updateRow(r);
-      let fileName = r.file.name || 'document';
-      const fileMime = String(r.file.type || '').toLowerCase();
-      if (!extOf(fileName) && (fileMime === 'application/epub+zip' || fileMime.includes('epub'))) {
-        fileName = `${fileName}.epub`;
-      }
-      fd.append('bookFile', r.file, fileName);
-      fd.append('categoryId', ctx.category.value);
-      fd.append('language', ctx.language.value);
-      fd.append('batchId', this.batch.id);
-      Object.entries(this.ownerParams(ctx)).forEach(([k, v]) => fd.append(k, v));
       let lastPaint = 0;
       try {
+        const fd = new FormData();
+        let fileName = r.file.name || 'document';
+        const fileMime = String(r.file.type || '').toLowerCase();
+        if (!extOf(fileName) && (fileMime === 'application/epub+zip' || fileMime.includes('epub'))) {
+          fileName = `${fileName}.epub`;
+        }
+        fd.append('bookFile', r.file, fileName);
+        if (ctx && ctx.title && ctx.title.value && ctx.title.value.trim()) {
+          fd.append('title', ctx.title.value.trim());
+        }
+        if (ctx && ctx.category && ctx.category.value) {
+          fd.append('categoryId', ctx.category.value);
+        }
+        if (ctx && ctx.language && ctx.language.value) {
+          fd.append('language', ctx.language.value);
+        }
+        if (this.batch && this.batch.id) {
+          fd.append('batchId', this.batch.id);
+        }
+        Object.entries(this.ownerParams(ctx)).forEach(([k, v]) => fd.append(k, v));
+
         const res = await api.upload('/api/ingestion/upload-book', fd, {
           onProgress: (p) => {
             r.progress = p;

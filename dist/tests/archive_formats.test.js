@@ -41,6 +41,63 @@ test('Phase 5 - 1GB Limits and Format Whitelisting', async (t) => {
     list.sort(naturalCompare);
     assert.deepEqual(list, ['page_1.jp2', 'page_2.jp2', 'page_10.jp2', 'page_20.jp2']);
   });
+
+  await t.test('storeUploadedFile respects custom title and falls back to original filename', async () => {
+    let cat = db.get('SELECT id FROM categories LIMIT 1');
+    let createdCat = false;
+    if (!cat) {
+      db.run("INSERT INTO categories (id, name, description, created_at) VALUES ('cat_test_title', 'General Test Cat', 'Test category', ?)", nowIso());
+      cat = { id: 'cat_test_title' };
+      createdCat = true;
+    }
+    let adminUser = db.get("SELECT * FROM users WHERE role = 'admin' LIMIT 1");
+    let createdAdmin = false;
+    if (!adminUser) {
+      db.run("INSERT INTO users (id, email, name, role, password_hash, status, created_at) VALUES ('usr_test_admin', 'admin_test@example.com', 'Admin Test', 'admin', 'fakehash', 'active', ?)", nowIso());
+      adminUser = { id: 'usr_test_admin', name: 'Admin Test', role: 'admin' };
+      createdAdmin = true;
+    }
+
+    const tmpFile1 = path.join(os.tmpdir(), `test-title-${Date.now()}-${Math.random()}.txt`);
+    fs.writeFileSync(tmpFile1, `Sample content ${Date.now()} ${Math.random()}`);
+    const tmpFile2 = path.join(os.tmpdir(), `test-fallback-${Date.now()}-${Math.random()}.txt`);
+    fs.writeFileSync(tmpFile2, `Sample content fallback ${Date.now()} ${Math.random()}`);
+
+    let docWithTitle;
+    let docFallback;
+    try {
+      docWithTitle = await documents.storeUploadedFile({
+        file: { originalname: 'raw_filename_123.txt', path: tmpFile1, size: 40, mimetype: 'text/plain' },
+        body: { categoryId: cat.id, title: 'Custom Curated Book Title' },
+        actor: adminUser,
+        ip: '127.0.0.1',
+      });
+      assert.equal(docWithTitle.title, 'Custom Curated Book Title');
+
+      docFallback = await documents.storeUploadedFile({
+        file: { originalname: 'another_filename_456.epub', path: tmpFile2, size: 41, mimetype: 'application/epub+zip' },
+        body: { categoryId: cat.id, title: '   ' },
+        actor: adminUser,
+        ip: '127.0.0.1',
+      });
+      assert.equal(docFallback.title, 'another_filename_456');
+    } finally {
+      if (docWithTitle) {
+        try { storage.remove(docWithTitle.vault_path); } catch (_) {}
+        db.run('DELETE FROM documents WHERE id = ?', docWithTitle.id);
+      }
+      if (docFallback) {
+        try { storage.remove(docFallback.vault_path); } catch (_) {}
+        db.run('DELETE FROM documents WHERE id = ?', docFallback.id);
+      }
+      if (createdCat) {
+        db.run("DELETE FROM categories WHERE id = 'cat_test_title'");
+      }
+      if (createdAdmin) {
+        db.run("DELETE FROM users WHERE id = 'usr_test_admin'");
+      }
+    }
+  });
 });
 
 test('Phase 5 - ZIP Archive Inspection', async (t) => {
