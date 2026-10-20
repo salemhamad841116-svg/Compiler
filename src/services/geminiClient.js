@@ -17,12 +17,12 @@ const config = require('../config');
 
 const API_BASE = (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
 
-const DEFAULT_GENERATION_MODEL = 'gemini-3.6-flash';
+const DEFAULT_GENERATION_MODEL = 'gemini-3.8-flash';
 // Tried in order when the configured generation model returns 404 (retired / not enabled for this key).
-const GENERATION_FALLBACKS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-2.5-flash'];
+const GENERATION_FALLBACKS = ['gemini-3.8-flash', 'gemini-3.6-flash'];
 const DEFAULT_EMBEDDING_MODEL = 'gemini-embedding-001';
 
-const RETIRED_GENERATION = /^(gemini-1\.0|gemini-1\.5|gemini-2\.0|gemini-pro$|gemini-pro-vision|gemini-ultra|chat-bison|text-bison)/i;
+const RETIRED_GENERATION = /^(gemini-1\.0|gemini-1\.5|gemini-2\.0|gemini-2\.5|gemini-pro$|gemini-pro-vision|gemini-ultra|chat-bison|text-bison)/i;
 const RETIRED_EMBEDDING = /^(text-embedding-00\d|embedding-001|embedding-gecko|textembedding-gecko|text-multilingual-embedding)/i;
 
 const warned = new Set();
