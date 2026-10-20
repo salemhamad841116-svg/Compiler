@@ -12,10 +12,10 @@ let timer = null;
 let started = false;
 
 /** Queues processing for a document. Returns false if an active job already exists (idempotent). */
-function enqueue(documentId) {
+function enqueue(documentId, { priority = 0 } = {}) {
   try {
-    run("INSERT INTO processing_jobs (id, document_id, status, attempt, queued_at) VALUES (?,?,?,?,?)", newId('job'), documentId, 'queued',
-      (get('SELECT COUNT(*) AS n FROM processing_jobs WHERE document_id = ?', documentId).n || 0) + 1, nowIso());
+    run("INSERT INTO processing_jobs (id, document_id, status, attempt, queued_at, priority) VALUES (?,?,?,?,?,?)", newId('job'), documentId, 'queued',
+      (get('SELECT COUNT(*) AS n FROM processing_jobs WHERE document_id = ?', documentId).n || 0) + 1, nowIso(), priority);
   } catch (e) {
     if (/UNIQUE/i.test(e.message)) return false;
     throw e;
@@ -26,7 +26,7 @@ function enqueue(documentId) {
 
 function claimNext() {
   return tx(() => {
-    const job = get("SELECT * FROM processing_jobs WHERE status = 'queued' ORDER BY queued_at, id LIMIT 1");
+    const job = get("SELECT * FROM processing_jobs WHERE status = 'queued' ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1");
     if (!job) return null;
     run("UPDATE processing_jobs SET status = 'running', started_at = ? WHERE id = ?", nowIso(), job.id);
     return job;
@@ -101,7 +101,7 @@ function queueStats() {
 }
 
 /** Re-queues a failed document. Never creates a new document or increments lifetime totals. */
-function retryDocument(documentId, user, { force = false, ip } = {}) {
+function retryDocument(documentId, user, { force = false, ip, priority = 10 } = {}) {
   const doc = documents.getAuthorizedDocument(documentId, user);
   const status = documents.pipelineStatus(doc);
   if (status === 'processing' || status === 'queued') {
@@ -117,7 +117,7 @@ function retryDocument(documentId, user, { force = false, ip } = {}) {
     `UPDATE documents SET index_status = 'pending', ocr_status = ?, failure_code = NULL, failure_reason = NULL WHERE id = ?`,
     doc.kind === 'image' || doc.kind === 'media' ? 'pending' : 'not_applicable', documentId
   );
-  const queued = enqueue(documentId);
+  const queued = enqueue(documentId, { priority });
   require('./eventBus').publishDoc('document.queued', doc);
   audit.record({
     action: 'document.retry_requested', actor: user, doc: get('SELECT * FROM documents WHERE id = ?', documentId), ip,
@@ -137,7 +137,7 @@ function retryAllFailed(actor, { ip } = {}) {
   const skipped = [];
   for (const d of failed) {
     try {
-      if (retryDocument(d.id, actor, { ip }).queued) queued++;
+      if (retryDocument(d.id, actor, { ip, priority: 0 }).queued) queued++;
       else skipped.push({ id: d.id, code: 'ALREADY_QUEUED' });
     } catch (e) {
       skipped.push({ id: d.id, code: e.code || 'ERROR' });

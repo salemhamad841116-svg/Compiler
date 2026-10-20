@@ -256,6 +256,16 @@ UPDATE chunks SET embed_model = 'gemini-embedding-001' WHERE embed_model IS NULL
 CREATE INDEX IF NOT EXISTS idx_chunks_embed_model ON chunks(embed_model);
 `,
   },
+  {
+    // High-priority job queue: fresh user uploads jump ahead of background batch retries.
+    id: 5,
+    name: 'processing_jobs_priority',
+    sql: `
+ALTER TABLE processing_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_jobs_priority_queued ON processing_jobs(status, priority, queued_at);
+UPDATE processing_jobs SET priority = 10 WHERE status = 'queued' AND document_id IN (SELECT id FROM documents WHERE uploaded_at >= datetime('now', '-1 day'));
+`,
+  },
 ];
 
 function openDb() {

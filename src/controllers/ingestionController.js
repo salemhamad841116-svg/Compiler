@@ -50,7 +50,7 @@ function uploadFile(expectKind) {
       actor: req.user,
       ip: clientIp(req),
     });
-    jobQueue.enqueue(doc.id);
+    jobQueue.enqueue(doc.id, { priority: 10 });
     res.status(201).json(shape(doc, 'File stored successfully. Processing has been queued.'));
   };
 }
@@ -66,14 +66,14 @@ async function uploadBookImages(req, res) {
     actor: req.user,
     ip: clientIp(req),
   });
-  jobQueue.enqueue(doc.id);
+  jobQueue.enqueue(doc.id, { priority: 10 });
   res.status(201).json(shape(doc, 'Book images stored successfully. OCR and indexing queued.'));
 }
 
 async function rawText(req, res) {
   const { title, textContent } = req.body || {};
   const doc = await documents.storeRawText({ title, textContent, body: req.body || {}, actor: req.user, ip: clientIp(req) });
-  jobQueue.enqueue(doc.id);
+  jobQueue.enqueue(doc.id, { priority: 10 });
   res.status(201).json(shape(doc, 'Text stored successfully. Indexing has been queued.'));
 }
 
@@ -83,7 +83,7 @@ async function scrapeUrl(req, res) {
     await assertPublicUrl(url);
     const scraped = await scrapeWebUrl(url);
     const doc = await documents.storeScrapedUrl({ url, title, scraped, body: req.body || {}, actor: req.user, ip: clientIp(req) });
-    jobQueue.enqueue(doc.id);
+    jobQueue.enqueue(doc.id, { priority: 10 });
     return res.status(201).json(shape(doc, 'Page content stored successfully. Indexing has been queued.'));
   } catch (err) {
     if (!(err instanceof AppError) || err.code.startsWith('URL_')) {

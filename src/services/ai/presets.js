@@ -32,14 +32,14 @@ const CLOUD_PRESETS = {
   google: {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     models: {
-      chat: 'gemini-1.5-flash',
-      vision: 'gemini-1.5-flash',
+      chat: 'gemini-2.5-flash',
+      vision: 'gemini-2.5-flash',
       embeddings: 'text-embedding-004',
       transcription: null,
     },
     suggestedModels: {
-      chat: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'],
-      vision: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'],
+      chat: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'],
+      vision: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'],
       embeddings: ['text-embedding-004'],
     },
     limits: { audioMb: 25, imageMb: 20 },
@@ -94,8 +94,8 @@ function normalizeAiModel(model) {
   if (!model) return model;
   let m = String(model).trim().replace(/^models\//i, '');
   if (/^gemini-/i.test(m)) {
-    if (/^gemini-flash(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-flash';
-    if (/^gemini-pro(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-pro';
+    if (/^gemini-1(\.[05])?-pro/i.test(m) || /^gemini-pro(?:[:\-]latest)?$/i.test(m)) return 'gemini-2.5-pro';
+    if (/^gemini-1(\.[05])?-flash/i.test(m) || /^gemini-flash(?:[:\-]latest)?$/i.test(m)) return 'gemini-2.5-flash';
     m = m.replace(/[:\-]latest$/i, '');
   }
   return m;

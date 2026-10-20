@@ -126,7 +126,7 @@ function load() {
         if (changed) {
           try {
             run('UPDATE system_settings SET value_enc = ? WHERE key = ?', JSON.stringify(cfg), CONFIG_KEY);
-            console.log('[Settings] Auto-sanitized stored AI model names in database (e.g. gemini-1.5-flash-latest -> gemini-1.5-flash).');
+            console.log('[Settings] Auto-sanitized stored AI model names in database (e.g. gemini-1.5-flash -> gemini-2.5-flash).');
           } catch (_) { /* non-blocking */ }
         }
       }

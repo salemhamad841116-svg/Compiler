@@ -687,8 +687,8 @@
       if (!model) return '';
       let m = String(model).trim().replace(/^models\//i, '');
       if (/^gemini-/i.test(m)) {
-        if (/^gemini-flash(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-flash';
-        if (/^gemini-pro(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-pro';
+        if (/^gemini-1(\.[05])?-pro/i.test(m) || /^gemini-pro(?:[:\-]latest)?$/i.test(m)) return 'gemini-2.5-pro';
+        if (/^gemini-1(\.[05])?-flash/i.test(m) || /^gemini-flash(?:[:\-]latest)?$/i.test(m)) return 'gemini-2.5-flash';
         m = m.replace(/[:\-]latest$/i, '');
       }
       return m;
