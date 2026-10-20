@@ -277,6 +277,34 @@ test('phase 5: open-source AI client, routing, OCR chain, embed_model filtering 
     assert.deepEqual(keyTest.json.data.result.missingModels, []);
   });
 
+  await t.test('Google AI Studio support: auto-switch on AIzaSy key, Gemini routing presets', async () => {
+    const g = await admin.get('/api/admin/settings/ai');
+    assert.ok(g.json.data.presets.cloud.google);
+    assert.equal(g.json.data.presets.cloud.google.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
+    assert.deepEqual(g.json.data.presets.cloud.google.suggestedModels.chat, ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash']);
+
+    const ep = await client.withEndpoint('cloud', async (endpoint) => endpoint, { key: 'AIzaSyTestGoogleKey1234567890abcdef' });
+    assert.equal(ep.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
+    assert.equal(ep.key, 'AIzaSyTestGoogleKey1234567890abcdef');
+
+    try {
+      const saveKey = await admin.put('/api/admin/settings/ai/keys', { primary: 'AIzaSyFakeGoogleApiKey1234567890abcdef' });
+      assert.equal(saveKey.status, 200);
+      const cfg = saveKey.json.data.config;
+      assert.equal(cfg.cloud.preset, 'google');
+      assert.equal(cfg.cloud.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
+      assert.equal(cfg.roles.chat.model, 'gemini-1.5-flash');
+      assert.equal(cfg.roles.vision.model, 'gemini-1.5-flash');
+    } finally {
+      await admin.del('/api/admin/settings/ai/keys/primary');
+      await admin.put('/api/admin/settings/ai/config', {
+        cloud: { preset: 'custom', baseUrl: `${fakeBase}/cloud/v1` },
+        roles: { chat: { model: 'fake-chat' }, vision: { model: 'fake-vision' } },
+      });
+      client._resetCooldowns();
+    }
+  });
+
   let textDocId;
   await t.test('pipeline: text is embedded locally, tagged with embed_model, and bahth answers through the chat model', async () => {
     const unique = 'Zellige astrolabe guild of Fez';

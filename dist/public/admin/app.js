@@ -673,6 +673,9 @@
 
   function buildSettings(root) {
     const inputs = {}; // cloud key slots
+    const roleRows = {};
+    let cloudPresetSelect = null;
+    let cloudUrlInput = null;
     const holder = h('div', {});
     const modelLists = { cloud: null, local: null }; // fetched from GET /models (live), used as suggestions
     let dirty = false; // any unsaved edit: background refreshes must not wipe it
@@ -719,7 +722,14 @@
       const input = h('input', {
         class: 'input', type: 'password', dir: 'ltr', autocomplete: 'new-password', spellcheck: 'false',
         placeholder: s.configured ? t('set.stored_ph', { last4: s.last4 || '????' }) : t('set.empty_ph'),
-        'aria-label': t(`set.slot_${s.slot}`), oninput: markDirty,
+        'aria-label': t(`set.slot_${s.slot}`), oninput: () => {
+          markDirty();
+          const val = input.value.trim();
+          if (val.startsWith('AIzaSy') && cloudPresetSelect && cloudPresetSelect.value !== 'google') {
+            cloudPresetSelect.value = 'google';
+            if (cloudPresetSelect.onchange) cloudPresetSelect.onchange();
+          }
+        },
       });
       inputs[s.slot] = input;
       const testBtn = h('button', { type: 'button', class: 'btn btn-sm', disabled: !s.configured, onclick: () => testSlot(s.slot, testBtn) }, icon('plug-circle-check'), ' ', t('set.test'));
@@ -744,13 +754,29 @@
 
     function cloudCard(d) {
       const cfg = d.config;
-      const preset = selectEl(Object.keys(d.presets.cloud).map((k) => [k, t(`set.preset_${k}`)]), cfg.cloud.preset, { onchange: () => {
+      const onPresetChange = () => {
         markDirty();
-        const def = d.presets.cloud[preset.value].baseUrl;
+        const pVal = preset.value;
+        const def = (d.presets.cloud[pVal] || {}).baseUrl;
         url.value = def || '';
         url.placeholder = def || t('set.custom_url_ph');
-      } });
+        cfg.cloud.preset = pVal;
+        Object.entries(roleRows).forEach(([role, x]) => {
+          if (x && x.target && x.target.value === 'cloud') {
+            const cloudPreset = d.presets.cloud[pVal];
+            const newDef = (cloudPreset && cloudPreset.models && cloudPreset.models[role]) || '';
+            const isOtherPresetModel = Object.values(d.presets.cloud).some((cp) => cp.models && cp.models[role] === x.model.value);
+            if (!x.model.value || isOtherPresetModel) {
+              x.model.value = newDef;
+            }
+          }
+        });
+        refreshDatalists();
+      };
+      const preset = selectEl(Object.keys(d.presets.cloud).map((k) => [k, t(`set.preset_${k}`)]), cfg.cloud.preset, { onchange: onPresetChange });
+      cloudPresetSelect = preset;
       const url = h('input', { class: 'input', type: 'url', dir: 'ltr', value: cfg.cloud.baseUrl || '', placeholder: t('set.custom_url_ph'), oninput: markDirty });
+      cloudUrlInput = url;
       const saveProvider = h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: async () => {
         saveProvider.disabled = true;
         await call(() => api.put('/api/admin/settings/ai/config', { cloud: { preset: preset.value, baseUrl: url.value.trim() } }), t('set.provider_saved'));
@@ -877,7 +903,8 @@
       Object.entries(datalists).forEach(([role, { list, target }]) => {
         const tg = target();
         const preset = tg === 'local' ? lastData.presets.local.models : tg === 'cloud' ? (lastData.presets.cloud[lastData.config.cloud.preset] || {}).models || {} : {};
-        const names = new Set([preset[role], ...(modelLists[tg] || [])].filter(Boolean));
+        const suggestions = (tg === 'cloud' && (lastData.presets.cloud[lastData.config.cloud.preset] || {}).suggestedModels && (lastData.presets.cloud[lastData.config.cloud.preset].suggestedModels[role])) || [];
+        const names = new Set([preset[role], ...suggestions, ...(modelLists[tg] || [])].filter(Boolean));
         clear(list);
         names.forEach((n) => list.appendChild(h('option', { value: n })));
       });
@@ -919,7 +946,8 @@
               : h('small', { class: 'err-text', dir: 'auto' }, icon('triangle-exclamation'), ' ', errLine(res.error)));
           } catch (err) { toastError(err); } finally { testBtn.disabled = false; }
         } }, icon('vial'), ' ', t('set.test'));
-        rows[role] = { target, model, fallback };
+        roleRows[role] = { target, model, fallback };
+        rows[role] = roleRows[role];
         return h('div', { class: 'role-row' },
           h('div', { class: 'role-name' }, icon(ROLE_ICONS[role]), ' ', h('strong', {}, t(`set.role_${role}`)), h('small', { class: 'muted' }, t(`set.role_${role}_hint`))),
           target, h('div', { class: 'role-model' }, model, list), testBtn,

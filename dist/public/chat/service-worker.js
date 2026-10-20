@@ -3,7 +3,7 @@
 // Bump `version` on every release so clients drop old caches.
 self.SW_CONFIG = {
   app: 'bahth',
-  version: '5.3.0',
+  version: '5.4.0',
   offlineShell: true, // the chat UI opens offline and explains that answers need a connection
   // When served from the site root on a single host, never touch the other apps.
   excludePaths: ['/supervisor', '/admin'],

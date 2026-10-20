@@ -752,6 +752,7 @@
     "preset": "Provider",
     "preset_groq": "Groq",
     "preset_together": "Together AI",
+    "preset_google": "Google AI Studio (Gemini)",
     "preset_custom": "Custom (OpenAI-compatible)",
     "base_url": "Endpoint URL",
     "custom_url_ph": "https://example.com/v1",

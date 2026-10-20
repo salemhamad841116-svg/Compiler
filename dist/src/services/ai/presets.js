@@ -29,6 +29,21 @@ const CLOUD_PRESETS = {
     },
     limits: { audioMb: 25, imageMb: 4 },
   },
+  google: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    models: {
+      chat: 'gemini-1.5-flash',
+      vision: 'gemini-1.5-flash',
+      embeddings: 'text-embedding-004',
+      transcription: null,
+    },
+    suggestedModels: {
+      chat: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+      vision: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+      embeddings: ['text-embedding-004'],
+    },
+    limits: { audioMb: 25, imageMb: 20 },
+  },
   custom: {
     baseUrl: '',
     models: { chat: '', vision: '', embeddings: '', transcription: '' },

@@ -208,6 +208,15 @@ function setCloudKeys(input, actor, { ip } = {}) {
     const meta = upsertSecret(slotKey(slot), val, actor);
     audit('settings.api_key_updated', actor, ip, { slot, last4: meta.last4 });
   }
+  const hasGoogleKey = changes.some((c) => c.val.startsWith('AIzaSy'));
+  const currentCfg = getAiConfig();
+  if (hasGoogleKey && currentCfg.cloud.preset !== 'google') {
+    try {
+      updateAiConfig({ cloud: { preset: 'google', baseUrl: CLOUD_PRESETS.google.baseUrl } }, actor, { ip });
+    } catch (e) {
+      console.warn('[Settings] Failed to auto-switch cloud preset to google:', e.message);
+    }
+  }
   onChange();
   return describeKeys();
 }
@@ -396,9 +405,21 @@ function updateAiConfig(patch, actor, { ip } = {}) {
     stored.cloud = stored.cloud || {};
     if (patch.cloud.preset !== undefined) {
       if (!CLOUD_PRESETS[patch.cloud.preset]) throw badConfig('Unknown cloud provider preset.', 'cloud.preset');
+      const prevPreset = stored.cloud.preset || before.cloud.preset;
       stored.cloud.preset = patch.cloud.preset;
       if (patch.cloud.baseUrl === undefined) delete stored.cloud.baseUrl;
       changed.push('cloud.preset');
+      if (prevPreset !== patch.cloud.preset && !patch.roles) {
+        stored.roles = stored.roles || {};
+        for (const r of ['chat', 'vision']) {
+          const cur = stored.roles[r] || {};
+          const prevDef = (CLOUD_PRESETS[prevPreset] && CLOUD_PRESETS[prevPreset].models[r]) || '';
+          if (!cur.model || cur.model === prevDef) {
+            cur.model = CLOUD_PRESETS[patch.cloud.preset].models[r] || cur.model;
+            stored.roles[r] = cur;
+          }
+        }
+      }
     }
     if (patch.cloud.baseUrl !== undefined) {
       stored.cloud.baseUrl = patch.cloud.baseUrl ? validUrl(patch.cloud.baseUrl, 'cloud.baseUrl') : CLOUD_PRESETS[stored.cloud.preset || before.cloud.preset].baseUrl;

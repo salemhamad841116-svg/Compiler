@@ -296,9 +296,18 @@ const liveProvider = {
   async testKey(slot) {
     return runKeyTest(slot, async (key) => {
       const client = require('./ai/openaiCompatClient');
-      const models = await client.listModels('cloud', { key });
+      const { CLOUD_PRESETS } = require('./ai/presets');
       const cfg = settings().getAiConfig();
-      const missing = cloudRoles(cfg).map((r) => cfg.roles[r].model).filter((m, i, a) => m && a.indexOf(m) === i && !models.includes(m));
+      const isGoogle = (key && key.startsWith('AIzaSy')) || cfg.cloud.preset === 'google';
+      const baseUrl = isGoogle ? CLOUD_PRESETS.google.baseUrl : undefined;
+      const models = await client.listModels('cloud', { key, baseUrl });
+      const activeRoles = cloudRoles(cfg).map((r) => {
+        if (isGoogle && cfg.cloud.preset !== 'google') {
+          return CLOUD_PRESETS.google.models[r];
+        }
+        return cfg.roles[r].model;
+      });
+      const missing = activeRoles.filter((m, i, a) => m && a.indexOf(m) === i && !models.includes(m));
       return { models: models.length, missingModels: missing };
     });
   },
@@ -306,7 +315,7 @@ const liveProvider = {
     const client = require('./ai/openaiCompatClient');
     return runRoleTest(role, async (r) => {
       if (role === 'chat') {
-        const text = await client.chat({ target: r.target, model: r.model, maxTokens: 16, temperature: 0, timeoutMs: 60000, label: 'test-chat', messages: [{ role: 'user', content: 'Reply with the single word OK.' }] });
+        const text = await client.chat({ target: r.target, model: r.model, maxTokens: 128, temperature: 0, timeoutMs: 60000, label: 'test-chat', messages: [{ role: 'user', content: 'Reply with the single word OK.' }] });
         return { sample: text.slice(0, 40) };
       }
       if (role === 'embeddings') {
@@ -319,7 +328,7 @@ const liveProvider = {
           if (!(await tools.has('tesseract'))) throw Object.assign(new Error('Tesseract is not installed on this server.'), { code: 'TOOL_MISSING' });
           return { sample: 'tesseract' };
         }
-        const text = await client.vision({ target: r.target, model: r.model, image: PROBE_PNG(), mime: 'image/png', prompt: 'Describe this image in at most five words.', maxTokens: 32, timeoutMs: 60000 });
+        const text = await client.vision({ target: r.target, model: r.model, image: PROBE_PNG(), mime: 'image/png', prompt: 'Describe this image in at most five words.', maxTokens: 128, timeoutMs: 60000 });
         return { sample: text.slice(0, 40) };
       }
       if (role === 'transcription') {

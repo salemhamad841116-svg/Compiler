@@ -95,7 +95,7 @@ family('act.status_', ['success', 'failed', 'completed', 'stored']);
 // System Settings (Phase 4 keys, Phase 5 open-source AI routing and search index)
 family('set.st_', ['ok', 'invalid', 'rate_limited', 'error', 'undecryptable', 'untested', 'empty']);
 family('set.slot_', ['primary', 'fallback1', 'fallback2', 'env']);
-family('set.preset_', ['groq', 'together', 'custom']);
+family('set.preset_', ['groq', 'together', 'google', 'custom']);
 family('set.target_', ['cloud', 'local', 'tesseract', 'disabled']);
 ['chat', 'vision', 'embeddings', 'transcription'].forEach((r) => { keys.add(`set.role_${r}`); keys.add(`set.role_${r}_hint`); });
 family('set.pdf_ocr_', ['auto', 'always', 'never']);

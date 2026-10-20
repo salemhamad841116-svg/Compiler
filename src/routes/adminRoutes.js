@@ -239,7 +239,7 @@ async function aiSettingsPayload() {
     config: cfg,
     embedTag: provider().embedTag(),
     presets: {
-      cloud: Object.fromEntries(Object.entries(CLOUD_PRESETS).map(([k, v]) => [k, { baseUrl: v.baseUrl, models: v.models }])),
+      cloud: Object.fromEntries(Object.entries(CLOUD_PRESETS).map(([k, v]) => [k, { baseUrl: v.baseUrl, models: v.models, suggestedModels: v.suggestedModels || {} }])),
       local: { baseUrl: LOCAL_PRESET.baseUrl, models: LOCAL_PRESET.models },
       roleTargets: ROLE_TARGETS,
     },

@@ -752,6 +752,7 @@
     "preset": "المزوّد",
     "preset_groq": "Groq",
     "preset_together": "Together AI",
+    "preset_google": "Google AI Studio (Gemini)",
     "preset_custom": "مخصّص (متوافق مع OpenAI)",
     "base_url": "عنوان نقطة الاتصال",
     "custom_url_ph": "https://example.com/v1",

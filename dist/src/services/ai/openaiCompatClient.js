@@ -127,6 +127,10 @@ function rateLimitRetries() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function isGoogleKey(k) {
+  return typeof k === 'string' && k.startsWith('AIzaSy');
+}
+
 /**
  * Runs fn(endpoint) against a target, rotating cloud keys on key problems.
  * @param {'cloud'|'local'} target
@@ -134,12 +138,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @param {{key?: string, label?: string, baseUrl?: string}} [opts] - key pins ONE key (per-slot test)
  */
 async function withEndpoint(target, fn, { key, label = 'call', baseUrl } = {}) {
-  const url = (baseUrl || baseUrlFor(target) || '').replace(/\/+$/, '');
-  if (!url) throw new AiNotConfiguredError(`No endpoint URL is configured for the ${target} AI provider.`);
+  const defaultUrl = (baseUrl || baseUrlFor(target) || '').replace(/\/+$/, '');
+  if (!defaultUrl) throw new AiNotConfiguredError(`No endpoint URL is configured for the ${target} AI provider.`);
   if (target === 'local') {
-    return fn({ baseUrl: url, key: key || settings().getLocalKey(), source: 'local' });
+    return fn({ baseUrl: defaultUrl, key: key || settings().getLocalKey(), source: 'local' });
   }
-  if (key) return fn({ baseUrl: url, key, source: 'pinned' });
+  const presets = require('./presets').CLOUD_PRESETS;
+  const googleBaseUrl = presets.google && presets.google.baseUrl;
+  if (key) {
+    const url = (!baseUrl && isGoogleKey(key) && googleBaseUrl) ? googleBaseUrl : defaultUrl;
+    return fn({ baseUrl: url, key, source: 'pinned' });
+  }
 
   const chain = settings().getCloudKeyChain();
   if (!chain.length) throw new AiNotConfiguredError('No cloud AI API key is configured (System Settings or LLM_API_KEY).');
@@ -151,6 +160,7 @@ async function withEndpoint(target, fn, { key, label = 'call', baseUrl } = {}) {
     let allRateLimited = true;
     for (let i = 0; i < order.length; i++) {
       const k = order[i];
+      const url = (!baseUrl && isGoogleKey(k.key) && googleBaseUrl) ? googleBaseUrl : defaultUrl;
       try {
         const out = await fn({ baseUrl: url, key: k.key, source: k.source });
         cooldown.delete(k.fp);
@@ -271,7 +281,14 @@ async function listModels(target, { key, baseUrl } = {}) {
   return withEndpoint(target, async (ep) => {
     const data = await request(ep, '/models', { timeoutMs: 20000, op: 'models', model: '-' });
     const list = Array.isArray(data && data.data) ? data.data : Array.isArray(data && data.models) ? data.models : [];
-    return list.map((m) => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean).sort();
+    const out = [];
+    for (const m of list) {
+      const id = typeof m === 'string' ? m : m && (m.id || m.name);
+      if (!id) continue;
+      out.push(id);
+      if (id.startsWith('models/')) out.push(id.replace(/^models\//, ''));
+    }
+    return [...new Set(out)].sort();
   }, { key, label: 'models', baseUrl });
 }
 
