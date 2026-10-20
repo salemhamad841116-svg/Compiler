@@ -683,6 +683,17 @@
     let pullTimer = null;
     const markDirty = () => { dirty = true; };
 
+    function normalizeAiModel(model) {
+      if (!model) return '';
+      let m = String(model).trim().replace(/^models\//i, '');
+      if (/^gemini-/i.test(m)) {
+        if (/^gemini-flash(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-flash';
+        if (/^gemini-pro(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-pro';
+        m = m.replace(/[:\-]latest$/i, '');
+      }
+      return m;
+    }
+
     async function call(fn, okMsg) {
       try {
         const r = await fn();
@@ -764,7 +775,7 @@
         Object.entries(roleRows).forEach(([role, x]) => {
           if (x && x.target && x.target.value === 'cloud') {
             const cloudPreset = d.presets.cloud[pVal];
-            const newDef = ((cloudPreset && cloudPreset.models && cloudPreset.models[role]) || '').replace(/^models\//i, '');
+            const newDef = normalizeAiModel((cloudPreset && cloudPreset.models && cloudPreset.models[role]) || '');
             const isOtherPresetModel = Object.values(d.presets.cloud).some((cp) => cp.models && cp.models[role] === x.model.value);
             if (!x.model.value || isOtherPresetModel) {
               x.model.value = newDef;
@@ -904,7 +915,7 @@
         const tg = target();
         const preset = tg === 'local' ? lastData.presets.local.models : tg === 'cloud' ? (lastData.presets.cloud[lastData.config.cloud.preset] || {}).models || {} : {};
         const suggestions = (tg === 'cloud' && (lastData.presets.cloud[lastData.config.cloud.preset] || {}).suggestedModels && (lastData.presets.cloud[lastData.config.cloud.preset].suggestedModels[role])) || [];
-        const names = new Set([preset[role], ...suggestions, ...(modelLists[tg] || [])].filter(Boolean).map((n) => String(n).trim().replace(/^models\//i, '')));
+        const names = new Set([preset[role], ...suggestions, ...(modelLists[tg] || [])].filter(Boolean).map(normalizeAiModel));
         clear(list);
         names.forEach((n) => list.appendChild(h('option', { value: n })));
       });
@@ -919,8 +930,12 @@
         const target = selectEl(targets.map((x) => [x, t(`set.target_${x}`)]), r.target, { 'aria-label': t('set.target') });
         const listId = `models-${role}`;
         const list = h('datalist', { id: listId });
-        const initialModel = String(r.model || '').trim().replace(/^models\//i, '');
-        const model = h('input', { class: 'input', dir: 'ltr', value: initialModel, list: listId, spellcheck: 'false', 'aria-label': t('set.model'), oninput: () => { model.value = model.value.replace(/^models\//i, ''); markDirty(); } });
+        const initialModel = normalizeAiModel(r.model);
+        const model = h('input', {
+          class: 'input', dir: 'ltr', value: initialModel, list: listId, spellcheck: 'false', 'aria-label': t('set.model'),
+          oninput: markDirty,
+          onblur: () => { const norm = normalizeAiModel(model.value); if (norm !== model.value) { model.value = norm; markDirty(); } },
+        });
         datalists[role] = { list, target: () => target.value };
         const fallback = role === 'vision' ? h('input', { type: 'checkbox', checked: r.tesseractFallback ? true : null, onchange: markDirty }) : null;
         const syncModelState = () => {
@@ -931,7 +946,7 @@
         target.addEventListener('change', () => {
           markDirty();
           const preset = target.value === 'local' ? d.presets.local.models : target.value === 'cloud' ? (d.presets.cloud[cfg.cloud.preset] || {}).models || {} : {};
-          if (preset[role] !== undefined) model.value = String(preset[role] || '').trim().replace(/^models\//i, '');
+          if (preset[role] !== undefined) model.value = normalizeAiModel(preset[role] || '');
           syncModelState();
           refreshDatalists();
         });
@@ -959,7 +974,7 @@
       const saveBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: async () => {
         const roles = {};
         Object.entries(rows).forEach(([role, x]) => {
-          roles[role] = { target: x.target.value, model: x.model.value.trim().replace(/^models\//i, '') };
+          roles[role] = { target: x.target.value, model: normalizeAiModel(x.model.value) };
           if (x.fallback) roles[role].tesseractFallback = x.fallback.checked;
         });
         const prevEmbed = `${cfg.roles.embeddings.target}:${cfg.roles.embeddings.model}`;

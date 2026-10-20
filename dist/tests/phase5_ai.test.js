@@ -305,6 +305,21 @@ test('phase 5: open-source AI client, routing, OCR chain, embed_model filtering 
       assert.equal(cfg.cloud.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
       assert.equal(cfg.roles.chat.model, 'gemini-1.5-flash');
       assert.equal(cfg.roles.vision.model, 'gemini-1.5-flash');
+
+      const { normalizeAiModel } = require('../src/services/ai/presets');
+      assert.equal(normalizeAiModel('gemini-1.5-flash-latest'), 'gemini-1.5-flash');
+      assert.equal(normalizeAiModel('models/gemini-1.5-flash-latest'), 'gemini-1.5-flash');
+      assert.equal(normalizeAiModel('gemini-1.5-pro-latest'), 'gemini-1.5-pro');
+      assert.equal(normalizeAiModel('gemini-flash-latest'), 'gemini-1.5-flash');
+      assert.equal(normalizeAiModel('gemini-pro-latest'), 'gemini-1.5-pro');
+      assert.equal(normalizeAiModel('gemini-2.5-flash:latest'), 'gemini-2.5-flash');
+
+      const saveLatest = await admin.put('/api/admin/settings/ai/config', {
+        roles: { chat: { model: 'gemini-1.5-flash-latest' }, vision: { model: 'models/gemini-1.5-flash-latest' } },
+      });
+      assert.equal(saveLatest.status, 200);
+      assert.equal(saveLatest.json.data.config.roles.chat.model, 'gemini-1.5-flash');
+      assert.equal(saveLatest.json.data.config.roles.vision.model, 'gemini-1.5-flash');
     } finally {
       await admin.del('/api/admin/settings/ai/keys/primary');
       await admin.put('/api/admin/settings/ai/config', {

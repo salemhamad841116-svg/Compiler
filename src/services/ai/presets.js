@@ -83,4 +83,22 @@ function suggestedModel(role, target, cloudPreset) {
   return '';
 }
 
-module.exports = { CLOUD_PRESETS, LOCAL_PRESET, ROLES, ROLE_TARGETS, suggestedModel };
+/**
+ * Normalizes model names across all providers.
+ * Specifically for Gemini / Google AI Studio:
+ *  - Strips leading "models/" prefix (Google OpenAI wrapper translates models/X into models/models/X -> 404)
+ *  - Strips trailing "-latest" or ":latest" (e.g. gemini-1.5-flash-latest -> gemini-1.5-flash) which Google's OpenAI API rejects with 404
+ *  - Maps legacy aliases (gemini-flash-latest -> gemini-1.5-flash, gemini-pro-latest -> gemini-1.5-pro)
+ */
+function normalizeAiModel(model) {
+  if (!model) return model;
+  let m = String(model).trim().replace(/^models\//i, '');
+  if (/^gemini-/i.test(m)) {
+    if (/^gemini-flash(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-flash';
+    if (/^gemini-pro(?:[:\-]latest)?$/i.test(m)) return 'gemini-1.5-pro';
+    m = m.replace(/[:\-]latest$/i, '');
+  }
+  return m;
+}
+
+module.exports = { CLOUD_PRESETS, LOCAL_PRESET, ROLES, ROLE_TARGETS, suggestedModel, normalizeAiModel };

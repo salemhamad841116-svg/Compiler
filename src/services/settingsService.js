@@ -19,7 +19,7 @@ const config = require('../config');
 const { get, all, run } = require('../db/database');
 const { nowIso } = require('../utils/clock');
 const { AppError } = require('../utils/errors');
-const { CLOUD_PRESETS, LOCAL_PRESET, ROLES, ROLE_TARGETS, suggestedModel } = require('./ai/presets');
+const { CLOUD_PRESETS, LOCAL_PRESET, ROLES, ROLE_TARGETS, suggestedModel, normalizeAiModel } = require('./ai/presets');
 
 const SLOTS = ['primary', 'fallback1', 'fallback2'];
 const slotKey = (slot) => `ai.cloud.key.${slot}`;
@@ -111,6 +111,25 @@ function load() {
       local = decryptRow(r, 'local endpoint key');
     } else if (r.key === CONFIG_KEY) {
       cfg = parseMeta(r.value_enc);
+      if (cfg && cfg.roles) {
+        let changed = false;
+        for (const roleName of Object.keys(cfg.roles)) {
+          const cur = cfg.roles[roleName] && cfg.roles[roleName].model;
+          if (cur) {
+            const norm = normalizeAiModel(cur);
+            if (norm !== cur) {
+              cfg.roles[roleName].model = norm;
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          try {
+            run('UPDATE system_settings SET value_enc = ? WHERE key = ?', JSON.stringify(cfg), CONFIG_KEY);
+            console.log('[Settings] Auto-sanitized stored AI model names in database (e.g. gemini-1.5-flash-latest -> gemini-1.5-flash).');
+          } catch (_) { /* non-blocking */ }
+        }
+      }
     }
   }
   cache = { at: Date.now(), rows, local, cfg };
@@ -329,7 +348,7 @@ function envDefaults() {
   const role = (name, envTarget, envModel, defTarget) => {
     const target = String(process.env[envTarget] || defTarget).toLowerCase();
     const t = ROLE_TARGETS[name].includes(target) ? target : defTarget;
-    const m = String(process.env[envModel] || '').trim().replace(/^models\//i, '');
+    const m = normalizeAiModel(process.env[envModel]);
     return { target: t, model: m || null };
   };
   return {
@@ -365,7 +384,7 @@ function getAiConfig() {
     const merged = { ...d.roles[r], ...((db.roles && db.roles[r]) || {}) };
     if (!ROLE_TARGETS[r].includes(merged.target)) merged.target = d.roles[r].target;
     if (!merged.model) merged.model = suggestedModel(r, merged.target, cloud.preset);
-    if (merged.model) merged.model = String(merged.model).trim().replace(/^models\//i, '');
+    if (merged.model) merged.model = normalizeAiModel(merged.model);
     roles[r] = merged;
   }
   const threshold = typeof db.similarityThreshold === 'number' ? db.similarityThreshold : d.similarityThreshold;
@@ -390,7 +409,7 @@ function validUrl(u, field) {
 
 /** Normalized identity of an embedding model: chunks indexed with another identity are stale. */
 function embedTagFor(cfg) {
-  return String(cfg.roles.embeddings.model || '').trim().replace(/^models\//i, '').toLowerCase().replace(/:latest$/, '');
+  return String(normalizeAiModel(cfg.roles.embeddings.model) || '').trim().toLowerCase().replace(/:latest$/, '');
 }
 
 /**
@@ -444,7 +463,7 @@ function updateAiConfig(patch, actor, { ip } = {}) {
         next.target = val.target;
       }
       if (val.model !== undefined) {
-        const m = String(val.model || '').trim().replace(/^models\//i, '');
+        const m = normalizeAiModel(val.model);
         if (m && !MODEL_RE.test(m)) throw badConfig('The model name contains invalid characters.', `roles.${name}.model`);
         next.model = m || null;
       }

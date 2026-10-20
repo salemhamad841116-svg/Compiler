@@ -23,6 +23,8 @@ function settings() {
   return require('../settingsService');
 }
 
+const { normalizeAiModel } = require('./presets');
+
 class AiHttpError extends Error {
   constructor(status, apiMessage, { op, model, host, retryAfterMs = null, apiCode = null } = {}) {
     super(`AI API ${status}${apiCode ? ` ${apiCode}` : ''} [${op} ${model || '-'} @ ${host || '-'}]: ${apiMessage || 'no error message'}`);
@@ -214,7 +216,7 @@ function textFromChat(data, ctx) {
  */
 async function chat({ target, model, messages, temperature = 0.2, maxTokens = 2048, timeoutMs = 120000, key, label = 'chat', baseUrl }) {
   if (!model) throw new AiNotConfiguredError(`No model is configured for ${label}.`);
-  const cleanModel = String(model).trim().replace(/^models\//i, '');
+  const cleanModel = normalizeAiModel(model);
   return withEndpoint(target, async (ep) => {
     const data = await request(ep, '/chat/completions', {
       json: { model: cleanModel, messages, temperature, max_tokens: maxTokens, stream: false },
@@ -229,7 +231,7 @@ async function chat({ target, model, messages, temperature = 0.2, maxTokens = 20
  * @param {{target, model, image: Buffer, mime: string, prompt: string, maxTokens?: number, timeoutMs?: number, key?: string}} o
  */
 async function vision({ target, model, image, mime, prompt, maxTokens = 4096, timeoutMs = 180000, key, baseUrl }) {
-  const cleanModel = String(model || '').trim().replace(/^models\//i, '');
+  const cleanModel = normalizeAiModel(model);
   const url = `data:${mime};base64,${Buffer.from(image).toString('base64')}`;
   return chat({
     target, model: cleanModel, key, baseUrl, timeoutMs, maxTokens, temperature: 0, label: 'vision',
@@ -245,7 +247,7 @@ async function vision({ target, model, image, mime, prompt, maxTokens = 4096, ti
  */
 async function embed(texts, { target, model, key, timeoutMs = 120000, baseUrl }) {
   if (!model) throw new AiNotConfiguredError('No embedding model is configured.');
-  const cleanModel = String(model).trim().replace(/^models\//i, '');
+  const cleanModel = normalizeAiModel(model);
   const input = texts.map((t) => String(t));
   return withEndpoint(target, async (ep) => {
     const data = await request(ep, '/embeddings', { json: { model: cleanModel, input, encoding_format: 'float' }, timeoutMs, op: 'embed', model: cleanModel });
@@ -267,7 +269,7 @@ async function embed(texts, { target, model, key, timeoutMs = 120000, baseUrl })
  */
 async function transcribe(audio, { target, model, filename, mime = 'audio/mpeg', language, timeoutMs = 300000, key, baseUrl }) {
   if (!model) throw new AiNotConfiguredError('No transcription model is configured.');
-  const cleanModel = String(model).trim().replace(/^models\//i, '');
+  const cleanModel = normalizeAiModel(model);
   return withEndpoint(target, async (ep) => {
     const form = new FormData();
     form.append('file', new Blob([audio], { type: mime }), filename);
@@ -289,7 +291,7 @@ async function listModels(target, { key, baseUrl } = {}) {
     for (const m of list) {
       const id = typeof m === 'string' ? m : m && (m.id || m.name);
       if (!id) continue;
-      out.push(id.replace(/^models\//i, ''));
+      out.push(normalizeAiModel(id));
     }
     return [...new Set(out)].sort();
   }, { key, label: 'models', baseUrl });

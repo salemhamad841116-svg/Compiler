@@ -123,11 +123,11 @@ async function runKeyTest(slot, probe) {
 /** Shared per-role test runner (real tiny call through the configured route). */
 async function runRoleTest(role, probe) {
   const { AppError } = require('../utils/errors');
-  const { ROLES } = require('./ai/presets');
+  const { ROLES, normalizeAiModel } = require('./ai/presets');
   if (!ROLES.includes(role)) throw new AppError(400, 'INVALID_ROLE', `Unknown AI role "${role}".`);
   const r = settings().getAiConfig().roles[role];
   const t0 = Date.now();
-  const cleanModel = r.model ? String(r.model).trim().replace(/^models\//i, '') : r.model;
+  const cleanModel = normalizeAiModel(r.model);
   try {
     const info = (await probe(r)) || {};
     return { role, target: r.target, model: cleanModel, status: 'ok', ms: Date.now() - t0, ...info };
@@ -267,16 +267,17 @@ const liveProvider = {
     const client = require('./ai/openaiCompatClient');
     const needsKey = cloudRoles(cfg);
     const hasKey = settings().hasUsableCloudKey();
+    const { normalizeAiModel } = require('./ai/presets');
     const info = {
       provider: 'openai',
       configured: !(needsKey.length && !hasKey),
       cloud: { preset: cfg.cloud.preset, host: client.hostOf(cfg.cloud.baseUrl), keySources: settings().getCloudKeyChain().map((k) => k.source) },
       local: { host: client.hostOf(cfg.local.baseUrl) },
       roles: cfg.roles,
-      embeddingModel: cfg.roles.embeddings.model,
-      generationModel: cfg.roles.chat.model,
-      ocrModel: cfg.roles.vision.target === 'tesseract' ? 'tesseract' : cfg.roles.vision.model,
-      transcriptionModel: cfg.roles.transcription.model,
+      embeddingModel: normalizeAiModel(cfg.roles.embeddings.model),
+      generationModel: normalizeAiModel(cfg.roles.chat.model),
+      ocrModel: cfg.roles.vision.target === 'tesseract' ? 'tesseract' : normalizeAiModel(cfg.roles.vision.model),
+      transcriptionModel: normalizeAiModel(cfg.roles.transcription.model),
       embedTag: this.embedTag(),
       status: 'unchecked',
     };
@@ -297,12 +298,12 @@ const liveProvider = {
   async testKey(slot) {
     return runKeyTest(slot, async (key) => {
       const client = require('./ai/openaiCompatClient');
-      const { CLOUD_PRESETS } = require('./ai/presets');
+      const { CLOUD_PRESETS, normalizeAiModel } = require('./ai/presets');
       const cfg = settings().getAiConfig();
       const isGoogle = (key && key.startsWith('AIzaSy')) || cfg.cloud.preset === 'google';
       const baseUrl = isGoogle ? CLOUD_PRESETS.google.baseUrl : undefined;
       const models = await client.listModels('cloud', { key, baseUrl });
-      const clean = (m) => (m ? String(m).trim().replace(/^models\//i, '') : m);
+      const clean = (m) => normalizeAiModel(m);
       const activeRoles = cloudRoles(cfg).map((r) => {
         if (isGoogle && cfg.cloud.preset !== 'google') {
           return CLOUD_PRESETS.google.models[r];
@@ -315,8 +316,9 @@ const liveProvider = {
   },
   async testRole(role) {
     const client = require('./ai/openaiCompatClient');
+    const { normalizeAiModel } = require('./ai/presets');
     return runRoleTest(role, async (r) => {
-      const cleanModel = r.model ? String(r.model).trim().replace(/^models\//i, '') : r.model;
+      const cleanModel = normalizeAiModel(r.model);
       if (role === 'chat') {
         const text = await client.chat({ target: r.target, model: cleanModel, maxTokens: 128, temperature: 0, timeoutMs: 60000, label: 'test-chat', messages: [{ role: 'user', content: 'Reply with the single word OK.' }] });
         return { sample: text.slice(0, 40) };
