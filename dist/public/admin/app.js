@@ -764,7 +764,7 @@
         Object.entries(roleRows).forEach(([role, x]) => {
           if (x && x.target && x.target.value === 'cloud') {
             const cloudPreset = d.presets.cloud[pVal];
-            const newDef = (cloudPreset && cloudPreset.models && cloudPreset.models[role]) || '';
+            const newDef = ((cloudPreset && cloudPreset.models && cloudPreset.models[role]) || '').replace(/^models\//i, '');
             const isOtherPresetModel = Object.values(d.presets.cloud).some((cp) => cp.models && cp.models[role] === x.model.value);
             if (!x.model.value || isOtherPresetModel) {
               x.model.value = newDef;
@@ -904,7 +904,7 @@
         const tg = target();
         const preset = tg === 'local' ? lastData.presets.local.models : tg === 'cloud' ? (lastData.presets.cloud[lastData.config.cloud.preset] || {}).models || {} : {};
         const suggestions = (tg === 'cloud' && (lastData.presets.cloud[lastData.config.cloud.preset] || {}).suggestedModels && (lastData.presets.cloud[lastData.config.cloud.preset].suggestedModels[role])) || [];
-        const names = new Set([preset[role], ...suggestions, ...(modelLists[tg] || [])].filter(Boolean));
+        const names = new Set([preset[role], ...suggestions, ...(modelLists[tg] || [])].filter(Boolean).map((n) => String(n).trim().replace(/^models\//i, '')));
         clear(list);
         names.forEach((n) => list.appendChild(h('option', { value: n })));
       });
@@ -919,7 +919,8 @@
         const target = selectEl(targets.map((x) => [x, t(`set.target_${x}`)]), r.target, { 'aria-label': t('set.target') });
         const listId = `models-${role}`;
         const list = h('datalist', { id: listId });
-        const model = h('input', { class: 'input', dir: 'ltr', value: r.model || '', list: listId, spellcheck: 'false', 'aria-label': t('set.model'), oninput: markDirty });
+        const initialModel = String(r.model || '').trim().replace(/^models\//i, '');
+        const model = h('input', { class: 'input', dir: 'ltr', value: initialModel, list: listId, spellcheck: 'false', 'aria-label': t('set.model'), oninput: () => { model.value = model.value.replace(/^models\//i, ''); markDirty(); } });
         datalists[role] = { list, target: () => target.value };
         const fallback = role === 'vision' ? h('input', { type: 'checkbox', checked: r.tesseractFallback ? true : null, onchange: markDirty }) : null;
         const syncModelState = () => {
@@ -930,7 +931,7 @@
         target.addEventListener('change', () => {
           markDirty();
           const preset = target.value === 'local' ? d.presets.local.models : target.value === 'cloud' ? (d.presets.cloud[cfg.cloud.preset] || {}).models || {} : {};
-          if (preset[role] !== undefined) model.value = preset[role] || '';
+          if (preset[role] !== undefined) model.value = String(preset[role] || '').trim().replace(/^models\//i, '');
           syncModelState();
           refreshDatalists();
         });
@@ -958,7 +959,7 @@
       const saveBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: async () => {
         const roles = {};
         Object.entries(rows).forEach(([role, x]) => {
-          roles[role] = { target: x.target.value, model: x.model.value.trim() };
+          roles[role] = { target: x.target.value, model: x.model.value.trim().replace(/^models\//i, '') };
           if (x.fallback) roles[role].tesseractFallback = x.fallback.checked;
         });
         const prevEmbed = `${cfg.roles.embeddings.target}:${cfg.roles.embeddings.model}`;

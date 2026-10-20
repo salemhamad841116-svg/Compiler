@@ -38,8 +38,8 @@ const CLOUD_PRESETS = {
       transcription: null,
     },
     suggestedModels: {
-      chat: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
-      vision: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+      chat: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'],
+      vision: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro'],
       embeddings: ['text-embedding-004'],
     },
     limits: { audioMb: 25, imageMb: 20 },

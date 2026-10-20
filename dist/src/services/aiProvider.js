@@ -127,12 +127,13 @@ async function runRoleTest(role, probe) {
   if (!ROLES.includes(role)) throw new AppError(400, 'INVALID_ROLE', `Unknown AI role "${role}".`);
   const r = settings().getAiConfig().roles[role];
   const t0 = Date.now();
+  const cleanModel = r.model ? String(r.model).trim().replace(/^models\//i, '') : r.model;
   try {
     const info = (await probe(r)) || {};
-    return { role, target: r.target, model: r.model, status: 'ok', ms: Date.now() - t0, ...info };
+    return { role, target: r.target, model: cleanModel, status: 'ok', ms: Date.now() - t0, ...info };
   } catch (e) {
     const c = classifyError(e);
-    return { role, target: r.target, model: r.model, status: 'error', ms: Date.now() - t0, error: { code: c.code, message: c.message } };
+    return { role, target: r.target, model: cleanModel, status: 'error', ms: Date.now() - t0, error: { code: c.code, message: c.message } };
   }
 }
 
@@ -301,12 +302,13 @@ const liveProvider = {
       const isGoogle = (key && key.startsWith('AIzaSy')) || cfg.cloud.preset === 'google';
       const baseUrl = isGoogle ? CLOUD_PRESETS.google.baseUrl : undefined;
       const models = await client.listModels('cloud', { key, baseUrl });
+      const clean = (m) => (m ? String(m).trim().replace(/^models\//i, '') : m);
       const activeRoles = cloudRoles(cfg).map((r) => {
         if (isGoogle && cfg.cloud.preset !== 'google') {
           return CLOUD_PRESETS.google.models[r];
         }
         return cfg.roles[r].model;
-      });
+      }).map(clean);
       const missing = activeRoles.filter((m, i, a) => m && a.indexOf(m) === i && !models.includes(m));
       return { models: models.length, missingModels: missing };
     });
@@ -314,12 +316,13 @@ const liveProvider = {
   async testRole(role) {
     const client = require('./ai/openaiCompatClient');
     return runRoleTest(role, async (r) => {
+      const cleanModel = r.model ? String(r.model).trim().replace(/^models\//i, '') : r.model;
       if (role === 'chat') {
-        const text = await client.chat({ target: r.target, model: r.model, maxTokens: 128, temperature: 0, timeoutMs: 60000, label: 'test-chat', messages: [{ role: 'user', content: 'Reply with the single word OK.' }] });
+        const text = await client.chat({ target: r.target, model: cleanModel, maxTokens: 128, temperature: 0, timeoutMs: 60000, label: 'test-chat', messages: [{ role: 'user', content: 'Reply with the single word OK.' }] });
         return { sample: text.slice(0, 40) };
       }
       if (role === 'embeddings') {
-        const [v] = await client.embed(['health check'], { target: r.target, model: r.model, timeoutMs: 60000 });
+        const [v] = await client.embed(['health check'], { target: r.target, model: cleanModel, timeoutMs: 60000 });
         return { dimensions: v.length };
       }
       if (role === 'vision') {
@@ -328,12 +331,12 @@ const liveProvider = {
           if (!(await tools.has('tesseract'))) throw Object.assign(new Error('Tesseract is not installed on this server.'), { code: 'TOOL_MISSING' });
           return { sample: 'tesseract' };
         }
-        const text = await client.vision({ target: r.target, model: r.model, image: PROBE_PNG(), mime: 'image/png', prompt: 'Describe this image in at most five words.', maxTokens: 128, timeoutMs: 60000 });
+        const text = await client.vision({ target: r.target, model: cleanModel, image: PROBE_PNG(), mime: 'image/png', prompt: 'Describe this image in at most five words.', maxTokens: 128, timeoutMs: 60000 });
         return { sample: text.slice(0, 40) };
       }
       if (role === 'transcription') {
         if (r.target === 'disabled') return { sample: 'disabled' };
-        await client.transcribe(silentWav(), { target: r.target, model: r.model, filename: 'probe.wav', mime: 'audio/wav', timeoutMs: 60000 });
+        await client.transcribe(silentWav(), { target: r.target, model: cleanModel, filename: 'probe.wav', mime: 'audio/wav', timeoutMs: 60000 });
         return { sample: 'OK' };
       }
       return {};

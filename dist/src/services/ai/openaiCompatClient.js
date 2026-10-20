@@ -70,7 +70,7 @@ function parseRetryAfter(res) {
  * @param {{json?: object, form?: FormData, method?: string, timeoutMs?: number, op: string, model?: string}} o
  */
 async function request(ep, path, { json, form, method, timeoutMs = 120000, op, model }) {
-  const url = `${ep.baseUrl}${path}`;
+  const url = `${ep.baseUrl.replace(/\/+$/, '')}${path}`;
   const host = hostOf(ep.baseUrl);
   const headers = { Accept: 'application/json' };
   if (ep.key) headers.Authorization = `Bearer ${ep.key}`;
@@ -92,9 +92,9 @@ async function request(ep, path, { json, form, method, timeoutMs = 120000, op, m
   let data = null;
   try { data = raw ? JSON.parse(raw) : null; } catch (_) { /* non-JSON body */ }
   if (!res.ok) {
-    const err = (data && (data.error || data)) || {};
-    const message = typeof err === 'string' ? err : err.message || err.detail || raw.slice(0, 300);
-    const apiCode = typeof err === 'object' ? err.code || err.type || null : null;
+    const errObj = (Array.isArray(data) && data[0] && (data[0].error || data[0])) || (data && (data.error || data)) || {};
+    const message = typeof errObj === 'string' ? errObj : errObj.message || errObj.detail || raw.slice(0, 300);
+    const apiCode = typeof errObj === 'object' ? errObj.code || errObj.type || null : null;
     throw new AiHttpError(res.status, String(message).slice(0, 400), { op, model, host, retryAfterMs: parseRetryAfter(res), apiCode: apiCode ? String(apiCode).slice(0, 60) : null });
   }
   if (data === null) throw new Error(`AI API returned an empty/non-JSON response [${op} ${model || '-'} @ ${host}].`);
@@ -214,12 +214,13 @@ function textFromChat(data, ctx) {
  */
 async function chat({ target, model, messages, temperature = 0.2, maxTokens = 2048, timeoutMs = 120000, key, label = 'chat', baseUrl }) {
   if (!model) throw new AiNotConfiguredError(`No model is configured for ${label}.`);
+  const cleanModel = String(model).trim().replace(/^models\//i, '');
   return withEndpoint(target, async (ep) => {
     const data = await request(ep, '/chat/completions', {
-      json: { model, messages, temperature, max_tokens: maxTokens, stream: false },
-      timeoutMs, op: label, model,
+      json: { model: cleanModel, messages, temperature, max_tokens: maxTokens, stream: false },
+      timeoutMs, op: label, model: cleanModel,
     });
-    return textFromChat(data, { op: label, model });
+    return textFromChat(data, { op: label, model: cleanModel });
   }, { key, label, baseUrl });
 }
 
@@ -228,9 +229,10 @@ async function chat({ target, model, messages, temperature = 0.2, maxTokens = 20
  * @param {{target, model, image: Buffer, mime: string, prompt: string, maxTokens?: number, timeoutMs?: number, key?: string}} o
  */
 async function vision({ target, model, image, mime, prompt, maxTokens = 4096, timeoutMs = 180000, key, baseUrl }) {
+  const cleanModel = String(model || '').trim().replace(/^models\//i, '');
   const url = `data:${mime};base64,${Buffer.from(image).toString('base64')}`;
   return chat({
-    target, model, key, baseUrl, timeoutMs, maxTokens, temperature: 0, label: 'vision',
+    target, model: cleanModel, key, baseUrl, timeoutMs, maxTokens, temperature: 0, label: 'vision',
     messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url } }] }],
   });
 }
@@ -243,14 +245,15 @@ async function vision({ target, model, image, mime, prompt, maxTokens = 4096, ti
  */
 async function embed(texts, { target, model, key, timeoutMs = 120000, baseUrl }) {
   if (!model) throw new AiNotConfiguredError('No embedding model is configured.');
+  const cleanModel = String(model).trim().replace(/^models\//i, '');
   const input = texts.map((t) => String(t));
   return withEndpoint(target, async (ep) => {
-    const data = await request(ep, '/embeddings', { json: { model, input, encoding_format: 'float' }, timeoutMs, op: 'embed', model });
+    const data = await request(ep, '/embeddings', { json: { model: cleanModel, input, encoding_format: 'float' }, timeoutMs, op: 'embed', model: cleanModel });
     const rows = Array.isArray(data && data.data) ? data.data.slice() : [];
     rows.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
     const vectors = rows.map((r) => r && r.embedding);
     if (vectors.length !== input.length || vectors.some((v) => !Array.isArray(v) || !v.length)) {
-      throw new Error(`Invalid embeddings response [embed ${model} @ ${hostOf(ep.baseUrl)}]: expected ${input.length} vectors, got ${vectors.length}.`);
+      throw new Error(`Invalid embeddings response [embed ${cleanModel} @ ${hostOf(ep.baseUrl)}]: expected ${input.length} vectors, got ${vectors.length}.`);
     }
     return vectors;
   }, { key, label: 'embed', baseUrl });
@@ -264,14 +267,15 @@ async function embed(texts, { target, model, key, timeoutMs = 120000, baseUrl })
  */
 async function transcribe(audio, { target, model, filename, mime = 'audio/mpeg', language, timeoutMs = 300000, key, baseUrl }) {
   if (!model) throw new AiNotConfiguredError('No transcription model is configured.');
+  const cleanModel = String(model).trim().replace(/^models\//i, '');
   return withEndpoint(target, async (ep) => {
     const form = new FormData();
     form.append('file', new Blob([audio], { type: mime }), filename);
-    form.append('model', model);
+    form.append('model', cleanModel);
     form.append('response_format', 'json');
     form.append('temperature', '0');
     if (language) form.append('language', language);
-    const data = await request(ep, '/audio/transcriptions', { form, timeoutMs, op: 'transcribe', model });
+    const data = await request(ep, '/audio/transcriptions', { form, timeoutMs, op: 'transcribe', model: cleanModel });
     return String((data && data.text) || '').trim();
   }, { key, label: 'transcribe', baseUrl });
 }
@@ -285,8 +289,7 @@ async function listModels(target, { key, baseUrl } = {}) {
     for (const m of list) {
       const id = typeof m === 'string' ? m : m && (m.id || m.name);
       if (!id) continue;
-      out.push(id);
-      if (id.startsWith('models/')) out.push(id.replace(/^models\//, ''));
+      out.push(id.replace(/^models\//i, ''));
     }
     return [...new Set(out)].sort();
   }, { key, label: 'models', baseUrl });

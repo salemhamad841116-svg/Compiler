@@ -187,6 +187,16 @@ test('phase 5: open-source AI client, routing, OCR chain, embed_model filtering 
     assert.match(trReq.contentType, /^multipart\/form-data; boundary=/);
     assert.ok(trReq.raw.includes('name="model"') && trReq.raw.includes('whisper-fake') && trReq.raw.includes('filename="a.mp3"'));
 
+    fake.requests.length = 0;
+    await client.chat({ target: 'cloud', model: 'models/fake-chat', messages: [{ role: 'user', content: 'hello' }] });
+    const strippedChat = fake.requests.find((r) => r.route === '/chat/completions');
+    assert.equal(strippedChat.body.model, 'fake-chat', 'models/ prefix stripped from chat model');
+
+    fake.requests.length = 0;
+    await client.embed(['test'], { target: 'local', model: 'models/fake-embed' });
+    const strippedEmbed = fake.requests.find((r) => r.route === '/embeddings');
+    assert.equal(strippedEmbed.body.model, 'fake-embed', 'models/ prefix stripped from embed model');
+
     assert.deepEqual(await client.listModels('cloud'), ['fake-chat', 'fake-embed', 'fake-embed-v2', 'fake-vision', 'whisper-fake']);
   });
 
@@ -281,7 +291,7 @@ test('phase 5: open-source AI client, routing, OCR chain, embed_model filtering 
     const g = await admin.get('/api/admin/settings/ai');
     assert.ok(g.json.data.presets.cloud.google);
     assert.equal(g.json.data.presets.cloud.google.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
-    assert.deepEqual(g.json.data.presets.cloud.google.suggestedModels.chat, ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash']);
+    assert.deepEqual(g.json.data.presets.cloud.google.suggestedModels.chat, ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro']);
 
     const ep = await client.withEndpoint('cloud', async (endpoint) => endpoint, { key: 'AIzaSyTestGoogleKey1234567890abcdef' });
     assert.equal(ep.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');

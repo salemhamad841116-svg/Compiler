@@ -329,7 +329,8 @@ function envDefaults() {
   const role = (name, envTarget, envModel, defTarget) => {
     const target = String(process.env[envTarget] || defTarget).toLowerCase();
     const t = ROLE_TARGETS[name].includes(target) ? target : defTarget;
-    return { target: t, model: String(process.env[envModel] || '').trim() || null };
+    const m = String(process.env[envModel] || '').trim().replace(/^models\//i, '');
+    return { target: t, model: m || null };
   };
   return {
     cloud: { preset: cloudPreset, baseUrl: trimUrl(process.env.CLOUD_AI_BASE_URL) || CLOUD_PRESETS[cloudPreset].baseUrl },
@@ -364,6 +365,7 @@ function getAiConfig() {
     const merged = { ...d.roles[r], ...((db.roles && db.roles[r]) || {}) };
     if (!ROLE_TARGETS[r].includes(merged.target)) merged.target = d.roles[r].target;
     if (!merged.model) merged.model = suggestedModel(r, merged.target, cloud.preset);
+    if (merged.model) merged.model = String(merged.model).trim().replace(/^models\//i, '');
     roles[r] = merged;
   }
   const threshold = typeof db.similarityThreshold === 'number' ? db.similarityThreshold : d.similarityThreshold;
@@ -388,7 +390,7 @@ function validUrl(u, field) {
 
 /** Normalized identity of an embedding model: chunks indexed with another identity are stale. */
 function embedTagFor(cfg) {
-  return String(cfg.roles.embeddings.model || '').trim().toLowerCase().replace(/:latest$/, '');
+  return String(cfg.roles.embeddings.model || '').trim().replace(/^models\//i, '').toLowerCase().replace(/:latest$/, '');
 }
 
 /**
@@ -442,7 +444,7 @@ function updateAiConfig(patch, actor, { ip } = {}) {
         next.target = val.target;
       }
       if (val.model !== undefined) {
-        const m = String(val.model || '').trim();
+        const m = String(val.model || '').trim().replace(/^models\//i, '');
         if (m && !MODEL_RE.test(m)) throw badConfig('The model name contains invalid characters.', `roles.${name}.model`);
         next.model = m || null;
       }
