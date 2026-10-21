@@ -265,6 +265,15 @@ ALTER TABLE processing_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_jobs_priority_queued ON processing_jobs(status, priority, queued_at);
 UPDATE processing_jobs SET priority = 10 WHERE status = 'queued' AND document_id IN (SELECT id FROM documents WHERE uploaded_at >= datetime('now', '-1 day'));
 `,
+    up(handle) {
+      const cols = handle.prepare("PRAGMA table_info('processing_jobs')").all();
+      const hasPriority = cols.some((c) => c.name === 'priority');
+      if (!hasPriority) {
+        handle.exec('ALTER TABLE processing_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
+      }
+      handle.exec('CREATE INDEX IF NOT EXISTS idx_jobs_priority_queued ON processing_jobs(status, priority, queued_at)');
+      handle.exec("UPDATE processing_jobs SET priority = 10 WHERE status = 'queued' AND document_id IN (SELECT id FROM documents WHERE uploaded_at >= datetime('now', '-1 day'))");
+    },
   },
 ];
 
@@ -277,7 +286,7 @@ function openDb() {
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA synchronous = NORMAL');
   db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
+  db.exec('PRAGMA busy_timeout = 10000');
   runMigrations(db);
   return db;
 }
@@ -291,7 +300,11 @@ function runMigrations(handle) {
     if (applied.has(m.id)) continue;
     handle.exec('BEGIN');
     try {
-      handle.exec(m.sql);
+      if (typeof m.up === 'function') {
+        m.up(handle);
+      } else {
+        handle.exec(m.sql);
+      }
       handle
         .prepare('INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)')
         .run(m.id, m.name, new Date().toISOString());
@@ -318,15 +331,23 @@ function closeDb() {
   }
 }
 
-/** Runs fn inside an IMMEDIATE transaction. Do not nest. */
+let inTx = false;
+
+/** Runs fn inside an IMMEDIATE transaction. Safe against nesting and lock contention. */
 function tx(fn) {
   const handle = getDb();
+  if (inTx) {
+    return fn(handle);
+  }
   handle.exec('BEGIN IMMEDIATE');
+  inTx = true;
   try {
     const result = fn(handle);
     handle.exec('COMMIT');
+    inTx = false;
     return result;
   } catch (err) {
+    inTx = false;
     try {
       handle.exec('ROLLBACK');
     } catch (_) {

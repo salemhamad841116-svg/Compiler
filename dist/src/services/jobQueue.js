@@ -18,6 +18,17 @@ function enqueue(documentId, { priority = 0 } = {}) {
       (get('SELECT COUNT(*) AS n FROM processing_jobs WHERE document_id = ?', documentId).n || 0) + 1, nowIso(), priority);
   } catch (e) {
     if (/UNIQUE/i.test(e.message)) return false;
+    if (/no such column.*priority/i.test(e.message)) {
+      try {
+        run("INSERT INTO processing_jobs (id, document_id, status, attempt, queued_at) VALUES (?,?,?,?,?)", newId('job'), documentId, 'queued',
+          (get('SELECT COUNT(*) AS n FROM processing_jobs WHERE document_id = ?', documentId).n || 0) + 1, nowIso());
+      } catch (inner) {
+        if (/UNIQUE/i.test(inner.message)) return false;
+        throw inner;
+      }
+      setImmediate(pump);
+      return true;
+    }
     throw e;
   }
   setImmediate(pump);
@@ -25,12 +36,32 @@ function enqueue(documentId, { priority = 0 } = {}) {
 }
 
 function claimNext() {
-  return tx(() => {
-    const job = get("SELECT * FROM processing_jobs WHERE status = 'queued' ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1");
+  const tryClaim = () => {
+    let job = null;
+    try {
+      job = get("SELECT * FROM processing_jobs WHERE status = 'queued' ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1");
+    } catch (err) {
+      if (/no such column.*priority/i.test(err.message)) {
+        job = get("SELECT * FROM processing_jobs WHERE status = 'queued' ORDER BY queued_at ASC, id ASC LIMIT 1");
+      } else {
+        throw err;
+      }
+    }
     if (!job) return null;
-    run("UPDATE processing_jobs SET status = 'running', started_at = ? WHERE id = ?", nowIso(), job.id);
+    const res = run("UPDATE processing_jobs SET status = 'running', started_at = ? WHERE id = ? AND status = 'queued'", nowIso(), job.id);
+    if (!res || res.changes === 0) return null;
     return job;
-  });
+  };
+
+  try {
+    return tx(tryClaim);
+  } catch (err) {
+    if (/cannot start a transaction|database is locked|busy/i.test(err.message)) {
+      console.warn(`[Queue] tx lock contention (${err.message}), falling back to direct atomic claim`);
+      return tryClaim();
+    }
+    throw err;
+  }
 }
 
 async function runJob(job) {
@@ -67,10 +98,21 @@ function start() {
   if (started) return;
   started = true;
   // Crash recovery: jobs that were running when the process stopped are resumed.
-  run("UPDATE processing_jobs SET status = 'queued', started_at = NULL WHERE status = 'running'");
-  // Documents stuck mid-processing without an active job are re-queued.
-  const orphans = all("SELECT id FROM documents WHERE (index_status = 'processing' OR ocr_status = 'processing') AND id NOT IN (SELECT document_id FROM processing_jobs WHERE status IN ('queued','running'))");
-  for (const o of orphans) enqueue(o.id);
+  try {
+    run("UPDATE processing_jobs SET status = 'queued', started_at = NULL WHERE status = 'running'");
+  } catch (e) {
+    console.error('[Queue] Crash recovery reset failed:', e.message);
+  }
+  // Documents stuck mid-processing or waiting without an active job are re-queued.
+  try {
+    const orphans = all("SELECT id FROM documents WHERE (index_status = 'processing' OR ocr_status = 'processing' OR index_status = 'pending') AND id NOT IN (SELECT document_id FROM processing_jobs WHERE status IN ('queued','running'))");
+    for (const o of orphans) enqueue(o.id, { priority: 10 });
+    if (orphans.length > 0) {
+      console.log(`[Queue] Recovered and enqueued ${orphans.length} stuck/pending document(s).`);
+    }
+  } catch (e) {
+    console.error('[Queue] Stuck document recovery check failed:', e.message);
+  }
   timer = setInterval(pump, 2000);
   timer.unref();
   setImmediate(pump);

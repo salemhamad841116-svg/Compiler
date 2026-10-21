@@ -390,7 +390,10 @@ const geminiProvider = {
   available() {
     try {
       const gc = require('./geminiClient');
-      return Boolean(gc.getWorkingKey && gc.getWorkingKey());
+      if (typeof gc.getWorkingKey === 'function') {
+        return Boolean(gc.getWorkingKey());
+      }
+      return Boolean(config.geminiApiKey);
     } catch (_) {
       return false;
     }
@@ -400,7 +403,11 @@ const geminiProvider = {
     const d = gc.describeConfig();
     let hasKey = false;
     try {
-      hasKey = Boolean(gc.getWorkingKey());
+      if (typeof gc.getWorkingKey === 'function') {
+        hasKey = Boolean(gc.getWorkingKey());
+      } else {
+        hasKey = Boolean(config.geminiApiKey);
+      }
     } catch (_) {
       hasKey = false;
     }
