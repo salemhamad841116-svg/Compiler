@@ -1,0 +1,31 @@
+{
+  "app": {
+    "name": "ChatHSM",
+    "tagline": "Your premium AI workspace"
+  },
+  "sidebar": {
+    "newChat": "New chat",
+    "search": "Search conversations",
+    "recent": "Recent",
+    "library": "Library",
+    "settings": "Settings",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "language": "Language"
+  },
+  "chat": {
+    "greeting": "Ask about anything",
+    "subtitle": "Ask anything, brainstorm ideas, or get instant answers.",
+    "placeholder": "Message ChatHSM...",
+    "send": "Send",
+    "you": "You",
+    "assistant": "ChatHSM",
+    "thinking": "Thinking...",
+    "suggestions": {
+      "one": "Draft a launch announcement",
+      "two": "Summarize a long document",
+      "three": "Plan a 7-day travel itinerary",
+      "four": "Explain a concept simply"
+    }
+  }
+}

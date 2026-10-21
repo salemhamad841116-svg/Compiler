@@ -1,33 +1,37 @@
-// End-User Chat Client App (Isolated Q&A Interface)
-let isProcessing = false;
+// ==============================================================================
+// ChatHSM Client Application Architecture
+// Strictly zero-Arabic source code: all localized strings retrieved via i18n
+// ==============================================================================
 
-const messagesContainer = document.getElementById('messagesContainer');
-const suggestionsContainer = document.getElementById('suggestionsContainer');
 const chatForm = document.getElementById('chatForm');
 const queryInput = document.getElementById('queryInput');
 const sendBtn = document.getElementById('sendBtn');
+const messagesContainer = document.getElementById('messagesContainer');
+const suggestionsContainer = document.getElementById('suggestionsContainer');
 const connectionStatus = document.getElementById('connectionStatus');
+const statusText = document.getElementById('statusText');
 const langToggleBtn = document.getElementById('langToggleBtn');
 const currentLangLabel = document.getElementById('currentLangLabel');
+const clearChatBtn = document.getElementById('clearChatBtn');
+const chatSidebar = document.getElementById('chatSidebar');
+const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+const newChatBtn = document.getElementById('newChatBtn');
+const chatSearchInput = document.getElementById('chatSearchInput');
+const recentChatsList = document.getElementById('recentChatsList');
+
+let isProcessing = false;
 
 const tr = (key, vars) => (window.i18n ? window.i18n.t(key, vars) : key);
 
 function updateLangUi(lang) {
   if (currentLangLabel) {
-    currentLangLabel.textContent = (lang || 'en').toUpperCase();
+    currentLangLabel.textContent = (lang || 'ar').toUpperCase();
   }
 }
 
 function initWelcomeMessage() {
   messagesContainer.innerHTML = '';
-  const welcomeText = tr('chat.greeting');
-
-  renderMessage({
-    sender: 'assistant',
-    text: welcomeText,
-    sources: [],
-    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  });
   suggestionsContainer.style.display = 'flex';
 }
 
@@ -35,15 +39,19 @@ async function checkBackendHealth() {
   try {
     const res = await fetch('/health');
     if (res.ok) {
-      connectionStatus.querySelector('.status-dot').classList.add('connected');
-      const text = window.i18n ? window.i18n.t('chat.connected', 'Connected to Private Knowledge Base') : 'Search Index Active';
-      connectionStatus.querySelector('.status-text').textContent = text;
+      const dot = connectionStatus.querySelector('.status-dot');
+      if (dot) dot.classList.add('connected');
+      if (statusText) {
+        statusText.textContent = tr('chat.connected', 'Connected to Private Knowledge Base');
+      }
       return true;
     }
-  } catch (err) {
-    connectionStatus.querySelector('.status-dot').classList.remove('connected');
-    const text = window.i18n ? window.i18n.t('chat.connecting', 'Connecting to Knowledge Base...') : 'Index Offline';
-    connectionStatus.querySelector('.status-text').textContent = text;
+  } catch (_) {
+    const dot = connectionStatus.querySelector('.status-dot');
+    if (dot) dot.classList.remove('connected');
+    if (statusText) {
+      statusText.textContent = tr('chat.connecting', 'Connecting to Knowledge Base...');
+    }
   }
   return false;
 }
@@ -69,15 +77,15 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
             <div class="citation-toggle">
               <div class="citation-title-box">
                 <i class="fa-solid fa-file-lines"></i>
-                <span>#${i + 1}: ${escapeHtml(src.bookTitle)}${src.page ? ` · ${escapeHtml(tr('chat.page_n', { n: src.page }))}` : ''}</span>
+                <span>#${i + 1}: ${escapeHtml(src.bookTitle || src.title || 'Reference')}${src.page ? ` · ${escapeHtml(tr('chat.page_n', { n: src.page }))}` : ''}</span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="citation-badge">${escapeHtml(tr('chat.match', { pct: (src.similarity * 100).toFixed(1) }))}</span>
+                <span class="citation-badge">${escapeHtml(tr('chat.match', { pct: ((src.similarity || 0.85) * 100).toFixed(1) }))}</span>
                 <i class="fa-solid fa-chevron-down citation-chevron"></i>
               </div>
             </div>
             <div class="citation-excerpt">
-              "${escapeHtml(src.excerpt)}"
+              "${escapeHtml(src.excerpt || src.content || '')}"
             </div>
           </div>
         `).join('')}
@@ -94,8 +102,8 @@ function renderMessage({ sender, text, sources = [], time, isLoading = false, ms
       </div>
     `;
   } else {
-    const rawHtml = marked.parse(text);
-    const cleanHtml = DOMPurify.sanitize(rawHtml);
+    const rawHtml = window.marked ? window.marked.parse(text) : text;
+    const cleanHtml = window.DOMPurify ? window.DOMPurify.sanitize(rawHtml) : rawHtml;
     bodyContent = `<div class="markdown-body">${cleanHtml}</div>${sourcesHtml}`;
   }
 
@@ -121,7 +129,7 @@ function scrollToBottom() {
 
 function escapeHtml(str) {
   if (!str) return '';
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 async function handleChatSubmit(e) {
@@ -157,7 +165,6 @@ async function handleChatSubmit(e) {
       body: JSON.stringify({ question: query })
     });
 
-    // Never call res.json() blindly: an empty or HTML body (proxy error) must become a clear message.
     const raw = await res.text();
     let data = null;
     try { data = raw ? JSON.parse(raw) : null; } catch (_) { data = null; }
@@ -182,7 +189,7 @@ async function handleChatSubmit(e) {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     }
-  } catch (err) {
+  } catch (_) {
     const loadingElem = document.getElementById(loadingId);
     if (loadingElem) loadingElem.remove();
     renderMessage({
@@ -197,11 +204,13 @@ async function handleChatSubmit(e) {
   }
 }
 
+// Auto-expand textarea
 queryInput.addEventListener('input', function() {
   this.style.height = 'auto';
-  this.style.height = (this.scrollHeight) + 'px';
+  this.style.height = Math.min(this.scrollHeight, 180) + 'px';
 });
 
+// Submit on Enter
 queryInput.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -211,8 +220,65 @@ queryInput.addEventListener('keydown', function(e) {
 
 chatForm.addEventListener('submit', handleChatSubmit);
 
-const clearChatBtn = document.getElementById('clearChatBtn');
+// Sidebar Collapse / Expand Toggle
+if (sidebarToggleBtn && chatSidebar) {
+  sidebarToggleBtn.addEventListener('click', () => {
+    chatSidebar.classList.toggle('collapsed');
+    const isCollapsed = chatSidebar.classList.contains('collapsed');
+    sidebarToggleBtn.setAttribute('title', tr(isCollapsed ? 'chat.expand_sidebar' : 'chat.collapse_sidebar'));
+  });
+}
 
+// Mobile Menu Toggle
+if (mobileMenuBtn && chatSidebar) {
+  mobileMenuBtn.addEventListener('click', () => {
+    chatSidebar.classList.toggle('mobile-open');
+  });
+
+  // Close mobile drawer when clicking outside
+  document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768 && chatSidebar.classList.contains('mobile-open')) {
+      if (!chatSidebar.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+        chatSidebar.classList.remove('mobile-open');
+      }
+    }
+  });
+}
+
+// New Chat Button
+if (newChatBtn) {
+  newChatBtn.addEventListener('click', () => {
+    initWelcomeMessage();
+    if (chatSidebar.classList.contains('mobile-open')) {
+      chatSidebar.classList.remove('mobile-open');
+    }
+  });
+}
+
+// Recent chats search filter
+if (chatSearchInput && recentChatsList) {
+  chatSearchInput.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    const items = recentChatsList.querySelectorAll('.recent-chat-item');
+    items.forEach(item => {
+      const title = item.textContent.toLowerCase();
+      item.style.display = title.includes(term) ? 'flex' : 'none';
+    });
+  });
+}
+
+// Recent chat selection
+if (recentChatsList) {
+  recentChatsList.querySelectorAll('.recent-chat-item').forEach(item => {
+    item.addEventListener('click', () => {
+      recentChatsList.querySelectorAll('.recent-chat-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      initWelcomeMessage();
+    });
+  });
+}
+
+// Language Toggle
 if (langToggleBtn) {
   langToggleBtn.addEventListener('click', async () => {
     if (window.i18n) {
@@ -223,6 +289,7 @@ if (langToggleBtn) {
   });
 }
 
+// Suggestion Chips
 document.querySelectorAll('.suggestion-chip').forEach(chip => {
   chip.addEventListener('click', () => {
     const promptKey = chip.getAttribute('data-prompt-key');
@@ -232,6 +299,7 @@ document.querySelectorAll('.suggestion-chip').forEach(chip => {
   });
 });
 
+// Clear Chat Confirmation
 if (clearChatBtn) {
   clearChatBtn.addEventListener('click', () => {
     if (confirm(tr('chat.clear_confirm'))) {
@@ -240,11 +308,12 @@ if (clearChatBtn) {
   });
 }
 
+// App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
   if (window.i18n) {
     await window.i18n.init({
-      defaultLang: 'en',
-      allowedLangs: ['en', 'ar'],
+      defaultLang: 'ar',
+      allowedLangs: ['ar', 'en'],
       onChange: (lang) => {
         updateLangUi(lang);
       }

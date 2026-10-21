@@ -1,0 +1,144 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-glass: var(--glass);
+  --color-glass-border: var(--glass-border);
+  --font-sans: "Inter", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-arabic: "Tajawal", "Cairo", system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.875rem;
+
+  --background: oklch(0.16 0.02 270);
+  --foreground: oklch(0.98 0.005 270);
+
+  --card: oklch(0.21 0.025 270);
+  --card-foreground: oklch(0.98 0.005 270);
+
+  --popover: oklch(0.21 0.025 270);
+  --popover-foreground: oklch(0.98 0.005 270);
+
+  --primary: oklch(0.72 0.18 295);
+  --primary-foreground: oklch(0.16 0.02 270);
+
+  --secondary: oklch(0.27 0.03 270);
+  --secondary-foreground: oklch(0.98 0.005 270);
+
+  --muted: oklch(0.27 0.03 270);
+  --muted-foreground: oklch(0.72 0.02 270);
+
+  --accent: oklch(0.78 0.16 215);
+  --accent-foreground: oklch(0.16 0.02 270);
+
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 270);
+
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.72 0.18 295);
+
+  --sidebar: oklch(0.18 0.025 270 / 70%);
+  --sidebar-foreground: oklch(0.96 0.005 270);
+  --sidebar-accent: oklch(1 0 0 / 8%);
+  --sidebar-border: oklch(1 0 0 / 8%);
+
+  --glass: oklch(1 0 0 / 6%);
+  --glass-border: oklch(1 0 0 / 12%);
+
+  --gradient-primary: linear-gradient(135deg, oklch(0.72 0.18 295), oklch(0.78 0.16 215));
+  --gradient-aurora: radial-gradient(
+      80% 60% at 20% 20%,
+      oklch(0.72 0.18 295 / 35%),
+      transparent 60%
+    ),
+    radial-gradient(60% 50% at 90% 30%, oklch(0.78 0.16 215 / 30%), transparent 65%),
+    radial-gradient(70% 70% at 50% 100%, oklch(0.65 0.18 330 / 25%), transparent 60%);
+
+  --shadow-glass:
+    0 1px 0 0 oklch(1 0 0 / 8%) inset,
+    0 10px 40px -10px oklch(0 0 0 / 50%);
+  --shadow-elevated: 0 24px 60px -20px oklch(0 0 0 / 55%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  html[lang="ar"] body {
+    font-family: var(--font-arabic);
+  }
+}
+
+@utility glass-panel {
+  background-color: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: var(--shadow-glass);
+}
+
+@utility glass-strong {
+  background-color: oklch(0.16 0.02 270 / 65%);
+  border: 1px solid var(--color-glass-border);
+  backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: var(--shadow-glass);
+}
+
+@utility gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility aurora-bg {
+  background-image: var(--gradient-aurora);
+}

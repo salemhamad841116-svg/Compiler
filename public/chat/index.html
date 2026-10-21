@@ -1,23 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title data-i18n="chat.app_name">ChatHSM</title>
+  
+  <!-- PWA & Mobile Meta -->
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#070b14">
-  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#12101e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Bahth">
-  <meta name="application-name" content="Bahth">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bahth - Misruq</title>
+  <meta name="apple-mobile-web-app-title" content="ChatHSM">
+  
+  <!-- Favicons & Icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="brand/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="brand/favicon-16.png">
+  <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+
+  <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Core Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <script src="/js/i18n.js"></script>
   <script>if (!window.i18n) { document.write('<script src="js/i18n.js"><\/script>'); }</script>
@@ -25,85 +32,159 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Ambient background glow effects -->
-  <div class="ambient-glow glow-1"></div>
-  <div class="ambient-glow glow-2"></div>
-  <div class="ambient-glow glow-3"></div>
+  <!-- Ambient Aurora Glow & Grid Background -->
+  <div class="aurora-backdrop" aria-hidden="true">
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb orb-1"></div>
+    <div class="aurora-orb orb-2"></div>
+    <div class="aurora-grid"></div>
+  </div>
 
-  <div class="app-layout">
-    <!-- Top Glass Navigation Bar (Strict User Search - No Upload Controls) -->
-    <header class="glass-header">
-      <div class="header-left">
-        <div class="logo-badge">
-          <i class="fa-solid fa-shield-halved"></i>
+  <div class="app-container" id="appContainer">
+    <!-- Collapsible ChatHSM Glass Sidebar -->
+    <aside class="chat-sidebar" id="chatSidebar">
+      <div class="sidebar-header">
+        <div class="brand-badge">
+          <img src="brand/pwa-192.png" alt="ChatHSM" class="brand-avatar">
+          <div class="brand-text">
+            <span class="brand-title" data-i18n="chat.app_name">ChatHSM</span>
+            <span class="brand-tagline" data-i18n="chat.tagline">Premium AI Workspace</span>
+          </div>
         </div>
-        <div class="brand-info">
-          <h1 data-i18n="chat.title">Private Knowledge Search</h1>
+        <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" data-i18n-attr="title:chat.collapse_sidebar" aria-label="Toggle sidebar">
+          <i class="fa-solid fa-angles-right" id="toggleIcon"></i>
+        </button>
+      </div>
+
+      <div class="sidebar-action-box">
+        <button type="button" class="new-chat-btn" id="newChatBtn">
+          <i class="fa-solid fa-plus"></i>
+          <span class="btn-label" data-i18n="chat.new_chat">New Chat</span>
+        </button>
+      </div>
+
+      <div class="sidebar-search-box">
+        <div class="search-input-wrap">
+          <i class="fa-solid fa-magnifying-glass search-icon"></i>
+          <input type="text" id="chatSearchInput" class="search-input" data-i18n-attr="placeholder:chat.search_chats" placeholder="Search chats...">
+        </div>
+      </div>
+
+      <div class="sidebar-recent-section">
+        <div class="recent-label" data-i18n="chat.recent_chats">Recent Chats</div>
+        <ul class="recent-chats-list" id="recentChatsList">
+          <li class="recent-chat-item active" data-id="default">
+            <i class="fa-regular fa-message"></i>
+            <span class="chat-title" data-i18n="chat.welcome">Welcome to ChatHSM</span>
+          </li>
+          <li class="recent-chat-item" data-id="c1">
+            <i class="fa-regular fa-message"></i>
+            <span class="chat-title" data-i18n="chat.prompt_1">What are the main principles and core ideas?</span>
+          </li>
+          <li class="recent-chat-item" data-id="c2">
+            <i class="fa-regular fa-message"></i>
+            <span class="chat-title" data-i18n="chat.prompt_2">Summarize key takeaways &amp; methodologies</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <button type="button" class="sidebar-footer-item" id="sidebarLibraryBtn">
+          <i class="fa-solid fa-book-bookmark"></i>
+          <span class="footer-label" data-i18n="chat.library">Knowledge Library</span>
+        </button>
+        <button type="button" class="sidebar-footer-item lang-toggle-btn" id="langToggleBtn">
+          <i class="fa-solid fa-globe"></i>
+          <span class="footer-label" id="currentLangLabel">Language</span>
+        </button>
+        <button type="button" class="sidebar-footer-item" id="sidebarSettingsBtn">
+          <i class="fa-solid fa-sliders"></i>
+          <span class="footer-label" data-i18n="chat.settings">Settings</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <main class="main-workspace">
+      <!-- Top Glass Navbar -->
+      <header class="top-navbar">
+        <div class="navbar-start">
+          <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">
+            <i class="fa-solid fa-bars"></i>
+          </button>
           <div class="connection-status" id="connectionStatus">
             <span class="status-dot"></span>
             <span class="status-text" id="statusText" data-i18n="chat.connecting">Connecting to Knowledge Base...</span>
           </div>
         </div>
-      </div>
-      <div class="header-actions">
-        <!-- Bilingual Language Toggle Button (EN / AR) -->
-        <button class="glass-btn btn-sm lang-toggle-btn" id="langToggleBtn" title="Toggle Language">
-          <i class="fa-solid fa-language"></i>
-          <span id="currentLangLabel">EN</span>
-        </button>
-        <div class="subdomain-tag">
-          <i class="fa-solid fa-globe"></i>
-          <span>bahth.misruq.com</span>
-        </div>
-        <button class="glass-btn btn-icon" id="clearChatBtn" data-i18n-attr="title:chat.clear_chat">
-          <i class="fa-solid fa-trash-can"></i>
-        </button>
-      </div>
-    </header>
-
-    <!-- Main Chat Workspace -->
-    <main class="chat-workspace">
-      <!-- Chat Messages Container -->
-      <div class="messages-container" id="messagesContainer">
-        <!-- Messages dynamically rendered here -->
-      </div>
-
-      <!-- Quick Suggestion Starter Prompts -->
-      <div class="suggestions-container" id="suggestionsContainer">
-        <div class="suggestions-title">
-          <i class="fa-solid fa-wand-magic-sparkles"></i>
-          <span data-i18n="chat.suggestions_title">Quick Starter Prompts</span>
-        </div>
-        <div class="suggestions-grid">
-          <button class="suggestion-chip" id="chipPrompt1" data-i18n="chat.prompt_1" data-prompt-key="chat.prompt_1">
-            What are the main principles and core ideas?
-          </button>
-          <button class="suggestion-chip" id="chipPrompt2" data-i18n="chat.prompt_2" data-prompt-key="chat.prompt_2">
-            Summarize key takeaways & methodologies
-          </button>
-          <button class="suggestion-chip" id="chipPrompt3" data-i18n="chat.prompt_3" data-prompt-key="chat.prompt_3">
-            Compare arguments across chapters
+        <div class="navbar-end">
+          <div class="subdomain-badge">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>ChatHSM Verified RAG</span>
+          </div>
+          <button type="button" class="glass-icon-btn" id="clearChatBtn" data-i18n-attr="title:chat.clear_chat" aria-label="Clear chat">
+            <i class="fa-solid fa-trash-can"></i>
           </button>
         </div>
-      </div>
+      </header>
 
-      <!-- Bottom Glass Input Area -->
-      <div class="input-wrapper">
-        <form class="glass-input-box" id="chatForm">
-          <textarea 
-            id="queryInput" 
-            data-i18n-attr="placeholder:chat.placeholder"
-            placeholder="Ask anything strictly based on your knowledge base books and notes..." 
-            rows="1"
-            autocomplete="off"
-          ></textarea>
-          <button type="submit" class="send-btn" id="sendBtn" data-i18n-attr="title:chat.send">
-            <i class="fa-solid fa-arrow-up"></i>
-          </button>
-        </form>
-        <div class="input-footer">
-          <i class="fa-solid fa-lock"></i>
-          <span data-i18n="chat.footer">End-User Isolation Mode • Zero Hallucinations • Answers verified against vector index.</span>
+      <!-- Messages & Conversation Container -->
+      <div class="conversation-wrapper">
+        <div class="messages-scroll-area" id="messagesContainer">
+          <!-- Chat messages dynamically rendered here -->
+        </div>
+
+        <!-- Empty Welcome & Suggestions Hero -->
+        <div class="welcome-hero" id="suggestionsContainer">
+          <div class="hero-sparkle-box">
+            <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
+          </div>
+          <h1 class="hero-title">
+            <span class="gradient-text" data-i18n="chat.greeting">Ask anything</span>
+          </h1>
+          <p class="hero-subtitle" data-i18n="chat.subtitle">
+            Ask anything, explore ideas, and get instant verified answers from your library.
+          </p>
+          <div class="suggestions-grid">
+            <button type="button" class="suggestion-chip" id="chipPrompt1" data-i18n="chat.prompt_1" data-prompt-key="chat.prompt_1">
+              What are the main principles and core ideas?
+            </button>
+            <button type="button" class="suggestion-chip" id="chipPrompt2" data-i18n="chat.prompt_2" data-prompt-key="chat.prompt_2">
+              Summarize key takeaways &amp; methodologies
+            </button>
+            <button type="button" class="suggestion-chip" id="chipPrompt3" data-i18n="chat.prompt_3" data-prompt-key="chat.prompt_3">
+              Compare arguments across chapters
+            </button>
+            <button type="button" class="suggestion-chip" id="chipPrompt4" data-i18n="chat.prompt_4" data-prompt-key="chat.prompt_4">
+              Explain a complex concept in simple terms
+            </button>
+          </div>
+        </div>
+
+        <!-- Floating Glass Input Box -->
+        <div class="input-wrapper">
+          <form class="floating-glass-input" id="chatForm">
+            <button type="button" class="input-tool-btn" id="attachBtn" title="Attach reference" aria-label="Attach">
+              <i class="fa-solid fa-paperclip"></i>
+            </button>
+            <textarea 
+              id="queryInput" 
+              data-i18n-attr="placeholder:chat.placeholder"
+              placeholder="Ask anything strictly based on your knowledge base books and notes..." 
+              rows="1"
+              autocomplete="off"
+            ></textarea>
+            <button type="button" class="input-tool-btn" id="micBtn" title="Voice input" aria-label="Voice">
+              <i class="fa-solid fa-microphone"></i>
+            </button>
+            <button type="submit" class="send-btn" id="sendBtn" data-i18n-attr="title:chat.send" aria-label="Send message">
+              <i class="fa-solid fa-arrow-up"></i>
+            </button>
+          </form>
+          <div class="input-footer-note">
+            <i class="fa-solid fa-shield-check"></i>
+            <span data-i18n="chat.footer">End-User Isolation Mode • Zero Hallucinations • Answers verified against vector index.</span>
+          </div>
         </div>
       </div>
     </main>
