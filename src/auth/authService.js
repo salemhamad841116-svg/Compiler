@@ -20,6 +20,7 @@ function publicUser(u) {
     lastLoginAt: u.last_login_at,
     lastLogoutAt: u.last_logout_at,
     disabledAt: u.disabled_at,
+    appSource: u.app_source || 'chathsm',
   };
 }
 
@@ -79,7 +80,7 @@ function createInvitation(userId, purpose, createdBy) {
   return { token, expiresAt, purpose };
 }
 
-function createUser({ name, email, role = 'supervisor' }, actor) {
+function createUser({ name, email, role = 'supervisor', appSource = 'chathsm' }, actor) {
   const cleanName = String(name || '').trim();
   const cleanEmail = normalizeEmail(email);
   if (!cleanName) throw new AppError(400, 'NAME_REQUIRED', 'Name is required.');
@@ -89,16 +90,17 @@ function createUser({ name, email, role = 'supervisor' }, actor) {
     throw new AppError(409, 'EMAIL_EXISTS', 'An account with this email already exists.');
   }
   const id = newId('usr');
+  const source = ['chathsm', 'sanea', 'all'].includes(appSource) ? appSource : 'chathsm';
   run(
-    `INSERT INTO users (id, email, name, role, status, created_at, created_by)
-     VALUES (?,?,?,?,?,?,?)`,
-    id, cleanEmail, cleanName, role, 'invited', nowIso(), actor.id
+    `INSERT INTO users (id, email, name, role, status, created_at, created_by, app_source)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    id, cleanEmail, cleanName, role, 'invited', nowIso(), actor.id, source
   );
   const invitation = createInvitation(id, 'invite', actor.id);
   const user = get('SELECT * FROM users WHERE id = ?', id);
   audit.record({
     action: 'account.created', actor, supervisor: role === 'supervisor' ? user : null,
-    detail: { userId: id, email: cleanEmail, role },
+    detail: { userId: id, email: cleanEmail, role, appSource: source },
   });
   return { user: publicUser(user), invitation };
 }

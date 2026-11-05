@@ -11,7 +11,7 @@
   const authRoot = document.getElementById('authRoot');
   const appRoot = document.getElementById('appRoot');
 
-  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, timers: [], listeners: [] };
+  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, timers: [], listeners: [] };
 
   // ------------------------------------------------------------------ shared lists
   function notifyCategoryConsumers() {
@@ -1084,13 +1084,333 @@
     state.settingsPanel = { reload: (o) => (dirty || Object.values(inputs).some((el) => el.value) ? null : panel.reload(o)) };
   }
 
+  // ------------------------------------------------------------------ builder
+  function builderLink(token) {
+    const { protocol, hostname, port } = window.location;
+    const m = hostname.match(/^(logs|admin)\.(.+)$/);
+    if (m) return `${protocol}//builder.${m[2]}${port ? `:${port}` : ''}/?invite=${token}`;
+    return `${window.location.origin}/builder/?invite=${token}`;
+  }
+
+  function showBuilderInvitation(inv, user) {
+    const link = builderLink(inv.token);
+    const box = h('div', { class: 'link-box', dir: 'ltr' }, link);
+    const copy = h('button', { type: 'button', class: 'btn', onclick: async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch (_) {
+        const range = document.createRange();
+        range.selectNodeContents(box);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('copy');
+      }
+      toast(t('adm.link_copied'), 'success', 2000);
+    } }, icon('copy'), ' ', t('adm.copy'));
+    modal({
+      title: t(inv.purpose === 'reset' ? 'adm.reset_link_title' : 'adm.invite_link_title'),
+      body: h('div', {},
+        h('p', {}, t('adm.builder_client_link_intro', { name: user.name })),
+        h('div', { class: 'copy-row' }, box, copy),
+        h('p', { class: 'muted' }, t('adm.link_expires', { time: fmtDateTime(inv.expiresAt) })),
+        h('div', { class: 'notice notice-warn' }, t('adm.link_once'))),
+      actions: [{ label: t('common.close'), kind: 'primary' }],
+    });
+  }
+
+  function addBuilderClient(onSuccess) {
+    const name = h('input', { class: 'input', required: true, maxlength: 120 });
+    const email = h('input', { class: 'input', type: 'email', required: true, dir: 'ltr' });
+    modal({
+      title: t('adm.builder_add_client'),
+      body: h('div', { class: 'form-col' },
+        field(t('acct.name'), name),
+        field(t('auth.email'), email),
+        h('p', { class: 'muted' }, t('adm.builder_add_client_hint'))),
+      actions: [
+        { label: t('common.cancel') },
+        {
+          label: t('adm.create_and_invite'),
+          kind: 'primary',
+          onClick: async () => {
+            if (!name.value.trim() || !email.value.trim()) throw new api.ApiError('', { code: 'FIELDS_REQUIRED' });
+            const r = await api.post('/api/admin/builder/clients', { name: name.value.trim(), email: email.value.trim() });
+            toast(t('adm.builder_client_created'), 'success');
+            if (onSuccess) onSuccess();
+            showBuilderInvitation(r.data.invitation, r.data.user);
+          },
+        },
+      ],
+    });
+  }
+
+  function showProjectDetailsModal(p, onUpdated) {
+    const statusSelect = selectEl([
+      ['pending_review', t('adm.builder_status_pending_review')],
+      ['in_progress', t('adm.builder_status_in_progress')],
+      ['completed', t('adm.builder_status_completed')],
+      ['cancelled', t('adm.builder_status_cancelled')],
+    ], p.status);
+
+    const bodyHolder = h('div', {});
+    modal({
+      title: t('adm.builder_project_details'),
+      body: bodyHolder,
+      actions: [
+        { label: t('common.cancel') },
+        {
+          label: t('adm.builder_update_status'),
+          kind: 'primary',
+          onClick: async () => {
+            await api.patch(`/api/admin/builder/projects/${p.id}/status`, { status: statusSelect.value });
+            toast(t('adm.builder_status_updated'), 'success');
+            if (onUpdated) onUpdated();
+          },
+        },
+      ],
+    });
+
+    createPanel(bodyHolder, () => api.get(`/api/builder/projects/${p.id}`).then((r) => r.data), (data) => {
+      const promptBox = data.prompt ? h('div', { class: 'link-box', style: 'white-space: pre-wrap; max-height: 160px; overflow-y: auto;' }, data.prompt) : h('span', { class: 'muted' }, '-');
+      const descBox = data.description ? h('p', {}, data.description) : null;
+      const htmlMeta = data.html ? h('p', { class: 'muted' }, t('adm.builder_html_preview'), ': ', fmtBytes(data.html.length)) : null;
+
+      const reqRows = (data.requests || []).map((r) => h('tr', {},
+        h('td', {}, r.request_type),
+        h('td', {}, r.prompt),
+        h('td', {}, chip(r.status, `adm.builder_status_${r.status}`)),
+        h('td', {}, fmtDateTime(r.created_at))));
+
+      const reqTable = (data.requests && data.requests.length)
+        ? h('div', { class: 'table-wrap', style: 'margin-top: 10px;' },
+            h('table', { class: 'table' },
+              h('thead', {}, h('tr', {},
+                h('th', {}, t('adm.builder_prompt_title')),
+                h('th', {}, t('adm.col_status')),
+                h('th', {}, t('adm.col_created_at')))),
+              h('tbody', {}, reqRows)))
+        : null;
+
+      return h('div', { class: 'form-col' },
+        h('div', { class: 'kv-grid' },
+          h('div', {}, h('strong', {}, t('adm.builder_col_project')), ': ', data.name),
+          h('div', {}, h('strong', {}, t('adm.col_client')), ': ', data.owner ? data.owner.name : (data.user_name || '-'))),
+        field(t('adm.col_status'), statusSelect),
+        descBox,
+        field(t('adm.builder_prompt_title'), promptBox),
+        htmlMeta,
+        reqTable ? h('div', {}, h('h4', { style: 'margin: 12px 0 6px;' }, t('adm.builder_requests_history', { n: fmtNumber((data.requests || []).length) })), reqTable) : null);
+    }).reload();
+  }
+
+  function buildBuilder(root) {
+    let activeTab = 'overview';
+    let filterStatus = '';
+    let searchQuery = '';
+
+    const toolbar = h('div', { class: 'toolbar' },
+      h('div', {},
+        h('h2', {}, t('adm.builder_title')),
+        h('p', { class: 'muted' }, t('adm.builder_subtitle'))),
+      h('div', { class: 'toolbar-actions' },
+        h('button', { type: 'button', class: 'btn btn-primary btn-sm', onclick: () => addBuilderClient(() => reloadActive()) }, icon('user-plus'), ' ', t('adm.builder_add_client')),
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: () => reloadActive() }, icon('rotate-right'), ' ', t('common.refresh'))));
+
+    const tabsBar = h('div', { class: 'tab-bar' });
+    const tabOverviewBtn = h('button', { type: 'button', class: 'tab-btn active', onclick: () => switchTab('overview') }, icon('gauge-high'), ' ', t('adm.builder_tab_overview'));
+    const tabClientsBtn = h('button', { type: 'button', class: 'tab-btn', onclick: () => switchTab('clients') }, icon('users'), ' ', t('adm.builder_tab_clients'));
+    const tabProjectsBtn = h('button', { type: 'button', class: 'tab-btn', onclick: () => switchTab('projects') }, icon('laptop-code'), ' ', t('adm.builder_tab_projects'));
+    tabsBar.append(tabOverviewBtn, tabClientsBtn, tabProjectsBtn);
+
+    const contentHolder = h('div', {});
+    root.append(toolbar, tabsBar, contentHolder);
+
+    function switchTab(tab) {
+      activeTab = tab;
+      [tabOverviewBtn, tabClientsBtn, tabProjectsBtn].forEach((b) => b.classList.remove('active'));
+      if (tab === 'overview') tabOverviewBtn.classList.add('active');
+      if (tab === 'clients') tabClientsBtn.classList.add('active');
+      if (tab === 'projects') tabProjectsBtn.classList.add('active');
+      renderTab();
+    }
+
+    function reloadActive() {
+      if (activeTab === 'overview' && state.builderOverviewPanel) state.builderOverviewPanel.reload();
+      if (activeTab === 'clients' && state.builderClientsPanel) state.builderClientsPanel.reload();
+      if (activeTab === 'projects' && state.builderProjectsPanel) state.builderProjectsPanel.reload();
+    }
+
+    state.builderPanel = {
+      reload: (opts) => {
+        if (activeTab === 'overview' && state.builderOverviewPanel) state.builderOverviewPanel.reload(opts);
+        if (activeTab === 'clients' && state.builderClientsPanel) state.builderClientsPanel.reload(opts);
+        if (activeTab === 'projects' && state.builderProjectsPanel) state.builderProjectsPanel.reload(opts);
+      },
+    };
+
+    function renderTab() {
+      clear(contentHolder);
+      if (activeTab === 'overview') renderOverview();
+      else if (activeTab === 'clients') renderClients();
+      else if (activeTab === 'projects') renderProjects();
+    }
+
+    function renderOverview() {
+      const panelHolder = h('div', {});
+      contentHolder.appendChild(panelHolder);
+      state.builderOverviewPanel = createPanel(panelHolder, async () => {
+        const [statsRes, reqsRes] = await Promise.all([
+          api.get('/api/admin/builder/stats'),
+          api.get('/api/admin/builder/requests?limit=5'),
+        ]);
+        return { stats: statsRes.data, recentRequests: reqsRes.data?.items || [] };
+      }, (data) => {
+        const s = data.stats || {};
+        const cards = [
+          statCard({ iconName: 'users', label: t('adm.builder_stat_active_clients'), value: fmtNumber(s.activeClients), tone: 'tone-ok' }),
+          statCard({ iconName: 'laptop-code', label: t('adm.builder_stat_total_projects'), value: fmtNumber(s.totalProjects), tone: 'tone-info' }),
+          statCard({ iconName: 'clock', label: t('adm.builder_stat_pending_requests'), value: fmtNumber(s.pendingRequests), tone: 'tone-warn' }),
+          statCard({ iconName: 'spinner', label: t('adm.builder_stat_in_progress'), value: fmtNumber(s.inProgressProjects), tone: 'tone-primary' }),
+        ];
+
+        const reqRows = (data.recentRequests || []).map((r) => h('tr', {},
+          h('td', {}, h('div', { class: 'title-main' }, r.project_name || '-'), h('small', { class: 'muted', dir: 'ltr' }, r.project_slug || '')),
+          h('td', {}, h('div', {}, r.user_name || '-'), h('small', { class: 'muted', dir: 'ltr' }, r.user_email || '')),
+          h('td', {}, r.prompt),
+          h('td', {}, chip(r.status, `adm.builder_status_${r.status}`)),
+          h('td', {}, fmtDateTime(r.created_at))));
+
+        const reqsCard = h('div', { class: 'card', style: 'margin-top: 18px;' },
+          h('h3', {}, t('adm.builder_recent_requests')),
+          reqRows.length
+            ? h('div', { class: 'table-wrap' },
+                h('table', { class: 'table' },
+                  h('thead', {}, h('tr', {},
+                    h('th', {}, t('adm.builder_col_project')),
+                    h('th', {}, t('adm.col_client')),
+                    h('th', {}, t('adm.builder_prompt_title')),
+                    h('th', {}, t('adm.col_status')),
+                    h('th', {}, t('adm.col_created_at')))),
+                  h('tbody', {}, reqRows)))
+            : emptyBox('adm.builder_no_requests'));
+
+        return h('div', {},
+          h('div', { class: 'stats-grid' }, ...cards),
+          reqsCard);
+      });
+      state.builderOverviewPanel.reload();
+    }
+
+    function renderClients() {
+      const panelHolder = h('div', {});
+      contentHolder.appendChild(panelHolder);
+      state.builderClientsPanel = createPanel(panelHolder, () => api.get('/api/admin/builder/clients').then((r) => r.data), (data) => {
+        const items = data.items || [];
+        if (!items.length) return emptyBox('adm.builder_no_clients');
+
+        const btn = (ic, key, fn, cls = '') => h('button', { type: 'button', class: `icon-btn ${cls}`, title: t(key), 'aria-label': t(key), onclick: fn }, icon(ic));
+
+        const rows = items.map((c) => h('tr', {},
+          h('td', {}, h('div', { class: 'title-main' }, c.name), h('small', { class: 'muted', dir: 'ltr' }, c.email)),
+          h('td', {}, chip(c.status, `accstatus.${c.status}`)),
+          h('td', {}, fmtNumber(c.projects_count)),
+          h('td', {}, fmtDateTime(c.created_at)),
+          h('td', {}, c.last_login_at ? fmtDateTime(c.last_login_at) : t('adm.never')),
+          h('td', { class: 'actions' },
+            btn('laptop-code', 'adm.builder_tab_projects', () => {
+              searchQuery = c.email;
+              switchTab('projects');
+            }),
+            btn(c.status === 'active' ? 'user-slash' : 'user-check', c.status === 'active' ? 'adm.disable' : 'adm.enable', async () => {
+              const newStatus = c.status === 'active' ? 'disabled' : 'active';
+              await api.patch(`/api/admin/builder/clients/${c.id}/status`, { status: newStatus });
+              toast(t('common.saved'), 'success');
+              state.builderClientsPanel.reload({ silent: true });
+            }, c.status === 'active' ? 'danger' : ''))));
+
+        return h('div', { class: 'table-wrap' },
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              ['adm.col_client', 'adm.col_account', 'adm.builder_col_projects_count', 'adm.col_created_at', 'adm.col_last_login', 'docs.col_actions'].map((k) => h('th', {}, t(k))))),
+            h('tbody', {}, rows)));
+      });
+      state.builderClientsPanel.reload();
+    }
+
+    function renderProjects() {
+      const filterBar = h('div', { class: 'toolbar', style: 'margin-bottom: 12px;' });
+      const statusSelect = selectEl([
+        ['', t('adm.builder_filter_all')],
+        ['pending_review', t('adm.builder_status_pending_review')],
+        ['in_progress', t('adm.builder_status_in_progress')],
+        ['completed', t('adm.builder_status_completed')],
+        ['cancelled', t('adm.builder_status_cancelled')],
+      ], filterStatus);
+      statusSelect.onchange = () => {
+        filterStatus = statusSelect.value;
+        state.builderProjectsPanel.reload();
+      };
+
+      const searchInput = h('input', {
+        class: 'input',
+        type: 'search',
+        placeholder: t('adm.builder_search_placeholder'),
+        value: searchQuery,
+      });
+      searchInput.oninput = () => {
+        searchQuery = searchInput.value.trim();
+        state.builderProjectsPanel.reload();
+      };
+
+      filterBar.append(
+        h('div', { style: 'display: flex; gap: 8px; flex: 1;' }, statusSelect, searchInput),
+        h('div', { class: 'toolbar-actions' },
+          h('button', { type: 'button', class: 'btn btn-sm', onclick: () => state.builderProjectsPanel.reload() }, icon('rotate-right'), ' ', t('common.refresh'))));
+
+      const panelHolder = h('div', {});
+      contentHolder.append(filterBar, panelHolder);
+
+      state.builderProjectsPanel = createPanel(panelHolder, () => {
+        const q = new URLSearchParams();
+        if (filterStatus) q.set('status', filterStatus);
+        if (searchQuery) q.set('search', searchQuery);
+        return api.get(`/api/admin/builder/projects?${q.toString()}`).then((r) => r.data);
+      }, (data) => {
+        const items = data.items || [];
+        if (!items.length) return emptyBox('adm.builder_no_projects');
+
+        const btn = (ic, key, fn, cls = '') => h('button', { type: 'button', class: `icon-btn ${cls}`, title: t(key), 'aria-label': t(key), onclick: fn }, icon(ic));
+
+        const rows = items.map((p) => h('tr', {},
+          h('td', {}, h('div', { class: 'title-main' }, p.name), h('small', { class: 'muted', dir: 'ltr' }, p.slug)),
+          h('td', {}, h('div', {}, p.user_name || '-'), h('small', { class: 'muted', dir: 'ltr' }, p.user_email || '')),
+          h('td', {}, fmtNumber(p.requests_count)),
+          h('td', {}, chip(p.status, `adm.builder_status_${p.status}`)),
+          h('td', {}, fmtDateTime(p.updated_at)),
+          h('td', { class: 'actions' },
+            btn('eye', 'adm.builder_act_details', () => showProjectDetailsModal(p, () => state.builderProjectsPanel.reload({ silent: true }))))));
+
+        return h('div', { class: 'table-wrap' },
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              ['adm.builder_col_project', 'adm.col_client', 'adm.builder_col_requests_count', 'adm.col_status', 'adm.col_updated_at', 'docs.col_actions'].map((k) => h('th', {}, t(k))))),
+            h('tbody', {}, rows)));
+      });
+      state.builderProjectsPanel.reload();
+    }
+
+    renderTab();
+  }
+
+
   // ------------------------------------------------------------------ app
   function teardown() {
     state.timers.forEach(clearInterval);
     state.timers = [];
     if (state.stats && state.stats.stop) state.stats.stop();
     if (window.Live) window.Live.reset();
-    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null });
+    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null });
     clear(appRoot);
   }
 
@@ -1114,6 +1434,7 @@
     const sections = [
       { id: 'overview', labelKey: 'adm.nav_overview', icon: 'gauge-high' },
       { id: 'analytics', labelKey: 'adm.nav_analytics', icon: 'chart-pie' },
+      { id: 'builder', labelKey: 'adm.nav_builder', icon: 'laptop-code' },
       { id: 'supervisors', labelKey: 'adm.nav_supervisors', icon: 'users-gear' },
       { id: 'presence', labelKey: 'adm.nav_presence', icon: 'signal' },
       { id: 'categories', labelKey: 'adm.nav_categories', icon: 'tags' },
@@ -1138,6 +1459,7 @@
           if (id === 'presence' && state.presencePanel) state.presencePanel.reload({ silent: true });
           if (id === 'categories' && state.catPanel) state.catPanel.reload({ silent: true });
           if (id === 'settings' && state.settingsPanel) state.settingsPanel.reload({ silent: true });
+          if (id === 'builder' && state.builderPanel) state.builderPanel.reload({ silent: true });
         }
       },
     });
@@ -1153,6 +1475,7 @@
     buildSupervisors(S.supervisors);
     buildPresence(S.presence);
     buildCategories(S.categories);
+    buildBuilder(S.builder);
 
     state.docs = window.Widgets.mountDocuments(S.documents, {
       admin: true, getCategories: () => state.categories, getSupervisors: () => state.supervisors,

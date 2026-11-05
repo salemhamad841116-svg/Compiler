@@ -161,10 +161,32 @@ services:
         aliases:
           - masruq_bahth_frontend
           - bahth-frontend
+      - builder-frontend
           - chat-frontend
 
   # ----------------------------------------------------------------------------
-  # 5. Enterprise Gateway Reverse Proxy (Subdomain Dispatch & Cloudflare Ingress)
+  # 5. Standalone App Builder Frontend (builder.misruq.com)
+  # ----------------------------------------------------------------------------
+  builder-frontend:
+    image: nginx:alpine
+    container_name: masruq_builder_frontend
+    restart: unless-stopped
+    volumes:
+      - ./public/builder:/usr/share/nginx/html:ro
+      - ./public:/var/www/public:ro
+      - ./deploy/nginx/builder-standalone.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8084:80"
+    depends_on:
+      - rag-backend
+    networks:
+      masruq_network:
+        aliases:
+          - masruq_builder_frontend
+          - builder-frontend
+
+  # ----------------------------------------------------------------------------
+  # 6. Enterprise Gateway Reverse Proxy (Subdomain Dispatch & Cloudflare Ingress)
   # ----------------------------------------------------------------------------
   gateway-proxy:
     image: nginx:alpine

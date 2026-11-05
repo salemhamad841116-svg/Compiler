@@ -275,6 +275,111 @@ UPDATE processing_jobs SET priority = 10 WHERE status = 'queued' AND document_id
       handle.exec("UPDATE processing_jobs SET priority = 10 WHERE status = 'queued' AND document_id IN (SELECT id FROM documents WHERE uploaded_at >= datetime('now', '-1 day'))");
     },
   },
+  {
+    // Phase 6: Sanea App Builder integration (projects, requests, files, app_source client separation)
+    id: 6,
+    name: 'sanea_builder_integration',
+    sql: `
+ALTER TABLE users ADD COLUMN app_source TEXT NOT NULL DEFAULT 'chathsm';
+CREATE INDEX IF NOT EXISTS idx_users_app_source ON users(app_source);
+
+CREATE TABLE IF NOT EXISTS app_projects (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  prompt TEXT,
+  slug TEXT UNIQUE,
+  html TEXT,
+  quality_status TEXT NOT NULL DEFAULT 'draft',
+  status TEXT NOT NULL DEFAULT 'pending_review' CHECK (status IN ('pending_review', 'in_progress', 'completed', 'cancelled')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_projects_user ON app_projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_app_projects_status ON app_projects(status);
+
+CREATE TABLE IF NOT EXISTS app_project_requests (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES app_projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_type TEXT NOT NULL DEFAULT 'feature',
+  prompt TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending_review' CHECK (status IN ('pending_review', 'in_progress', 'completed', 'cancelled')),
+  admin_notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_requests_project ON app_project_requests(project_id);
+CREATE INDEX IF NOT EXISTS idx_app_requests_user ON app_project_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_app_requests_status ON app_project_requests(status);
+
+CREATE TABLE IF NOT EXISTS app_project_files (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  file_type TEXT,
+  vault_path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_files_project ON app_project_files(project_id);
+`,
+    up(handle) {
+      const userCols = handle.prepare("PRAGMA table_info('users')").all();
+      const hasAppSource = userCols.some((c) => c.name === 'app_source');
+      if (!hasAppSource) {
+        handle.exec("ALTER TABLE users ADD COLUMN app_source TEXT NOT NULL DEFAULT 'chathsm'");
+      }
+      handle.exec('CREATE INDEX IF NOT EXISTS idx_users_app_source ON users(app_source)');
+
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS app_projects (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  prompt TEXT,
+  slug TEXT UNIQUE,
+  html TEXT,
+  quality_status TEXT NOT NULL DEFAULT 'draft',
+  status TEXT NOT NULL DEFAULT 'pending_review' CHECK (status IN ('pending_review', 'in_progress', 'completed', 'cancelled')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_projects_user ON app_projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_app_projects_status ON app_projects(status);
+
+CREATE TABLE IF NOT EXISTS app_project_requests (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES app_projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_type TEXT NOT NULL DEFAULT 'feature',
+  prompt TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending_review' CHECK (status IN ('pending_review', 'in_progress', 'completed', 'cancelled')),
+  admin_notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_requests_project ON app_project_requests(project_id);
+CREATE INDEX IF NOT EXISTS idx_app_requests_user ON app_project_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_app_requests_status ON app_project_requests(status);
+
+CREATE TABLE IF NOT EXISTS app_project_files (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  file_type TEXT,
+  vault_path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_files_project ON app_project_files(project_id);
+      `);
+    },
+  },
 ];
 
 function openDb() {
