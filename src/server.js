@@ -13,6 +13,7 @@ const TIER_DIRS = {
   supervisor: path.join(PUBLIC_DIR, 'supervisor'),
   admin: path.join(PUBLIC_DIR, 'admin'),
   builder: path.join(PUBLIC_DIR, 'builder'),
+  engineer: path.join(PUBLIC_DIR, 'builder'),
 };
 
 /** Decides which front-end tier a request belongs to: by host name first, then by path prefix. */
@@ -21,7 +22,7 @@ function tierFor(req) {
   if (host.startsWith('bahth.')) return 'chat';
   if (host.startsWith('waraqa.')) return 'supervisor';
   if (host.startsWith('logs.') || host.startsWith('admin.')) return 'admin';
-  if (host.startsWith('builder.') || host.startsWith('sanea.')) return 'builder';
+  if (host.startsWith('builder.') || host.startsWith('sanea.') || host.startsWith('engineer.')) return 'builder';
   return null;
 }
 
@@ -103,7 +104,7 @@ function createApp() {
   });
 
   // Path-based tiers for single-host deployments
-  for (const name of ['chat', 'supervisor', 'admin', 'builder']) {
+  for (const name of ['chat', 'supervisor', 'admin', 'builder', 'engineer']) {
     // Exact match only (Express routing is non-strict, so app.get('/admin') would also match '/admin/' and loop).
     app.use((req, res, next) => (req.path === `/${name}` && (req.method === 'GET' || req.method === 'HEAD') ? res.redirect(301, `/${name}/${req.url.slice(req.path.length)}`) : next()));
     app.use(`/${name}`, (req, res, next) => (tierFor(req) ? next() : tierStatics[name](req, res, next)));
@@ -114,7 +115,7 @@ function createApp() {
   // SPA fallback only for extension-less document navigations, never for missing assets
   app.get('*', (req, res, next) => {
     if (path.extname(req.path)) return next();
-    const tier = tierFor(req) || ['supervisor', 'admin', 'builder'].find((n) => req.path === `/${n}` || req.path.startsWith(`/${n}/`)) || 'chat';
+    const tier = tierFor(req) || ['supervisor', 'admin', 'builder', 'engineer'].find((n) => req.path === `/${n}` || req.path.startsWith(`/${n}/`)) || 'chat';
     const file = path.join(TIER_DIRS[tier], 'index.html');
     if (!fs.existsSync(file)) return next();
     res.setHeader('Cache-Control', 'no-cache');

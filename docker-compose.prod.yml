@@ -161,7 +161,6 @@ services:
         aliases:
           - masruq_bahth_frontend
           - bahth-frontend
-      - builder-frontend
           - chat-frontend
 
   # ----------------------------------------------------------------------------
@@ -203,6 +202,7 @@ services:
       - waraqa-frontend
       - admin-frontend
       - bahth-frontend
+      - builder-frontend
     networks:
       masruq_network:
         aliases:
