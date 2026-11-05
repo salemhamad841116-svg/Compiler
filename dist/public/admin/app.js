@@ -11,7 +11,7 @@
   const authRoot = document.getElementById('authRoot');
   const appRoot = document.getElementById('appRoot');
 
-  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, timers: [], listeners: [] };
+  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null, timers: [], listeners: [] };
 
   // ------------------------------------------------------------------ shared lists
   function notifyCategoryConsumers() {
@@ -1192,6 +1192,32 @@
               h('tbody', {}, reqRows)))
         : null;
 
+      const runsHolder = h('div', { style: 'margin-top: 12px;' });
+      api.get(`/api/builder/projects/${data.id}/runs`).then((r) => {
+        const runs = r.data || [];
+        if (!runs.length) return;
+        const rows = runs.map((rn) => {
+          const tr = rn.testReport || {};
+          return h('tr', {},
+            h('td', {}, chip(rn.status, `adm.builder_status_${rn.status}`)),
+            h('td', {}, Math.round((tr.passRate || 0) * 100) + '%'),
+            h('td', {}, (rn.duration_ms || 0) + 'ms'),
+            h('td', {}, fmtNumber(rn.repair_attempts || 0)),
+            h('td', {}, fmtDateTime(rn.created_at)));
+        });
+        const tbl = h('div', { class: 'table-wrap' },
+          h('h4', { style: 'margin: 10px 0 6px;' }, t('adm.builder_test_runs')),
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, t('adm.col_status')),
+              h('th', {}, 'Pass Rate'),
+              h('th', {}, 'Duration'),
+              h('th', {}, 'Repairs'),
+              h('th', {}, t('adm.col_created_at')))),
+            h('tbody', {}, rows)));
+        runsHolder.appendChild(tbl);
+      }).catch(() => {});
+
       return h('div', { class: 'form-col' },
         h('div', { class: 'kv-grid' },
           h('div', {}, h('strong', {}, t('adm.builder_col_project')), ': ', data.name),
@@ -1200,6 +1226,7 @@
         descBox,
         field(t('adm.builder_prompt_title'), promptBox),
         htmlMeta,
+        runsHolder,
         reqTable ? h('div', {}, h('h4', { style: 'margin: 12px 0 6px;' }, t('adm.builder_requests_history', { n: fmtNumber((data.requests || []).length) })), reqTable) : null);
     }).reload();
   }
@@ -1221,17 +1248,19 @@
     const tabOverviewBtn = h('button', { type: 'button', class: 'tab-btn active', onclick: () => switchTab('overview') }, icon('gauge-high'), ' ', t('adm.builder_tab_overview'));
     const tabClientsBtn = h('button', { type: 'button', class: 'tab-btn', onclick: () => switchTab('clients') }, icon('users'), ' ', t('adm.builder_tab_clients'));
     const tabProjectsBtn = h('button', { type: 'button', class: 'tab-btn', onclick: () => switchTab('projects') }, icon('laptop-code'), ' ', t('adm.builder_tab_projects'));
-    tabsBar.append(tabOverviewBtn, tabClientsBtn, tabProjectsBtn);
+    const tabBenchmarksBtn = h('button', { type: 'button', class: 'tab-btn', onclick: () => switchTab('benchmarks') }, icon('vial-circle-check'), ' ', t('adm.builder_tab_benchmarks'));
+    tabsBar.append(tabOverviewBtn, tabClientsBtn, tabProjectsBtn, tabBenchmarksBtn);
 
     const contentHolder = h('div', {});
     root.append(toolbar, tabsBar, contentHolder);
 
     function switchTab(tab) {
       activeTab = tab;
-      [tabOverviewBtn, tabClientsBtn, tabProjectsBtn].forEach((b) => b.classList.remove('active'));
+      [tabOverviewBtn, tabClientsBtn, tabProjectsBtn, tabBenchmarksBtn].forEach((b) => b.classList.remove('active'));
       if (tab === 'overview') tabOverviewBtn.classList.add('active');
       if (tab === 'clients') tabClientsBtn.classList.add('active');
       if (tab === 'projects') tabProjectsBtn.classList.add('active');
+      if (tab === 'benchmarks') tabBenchmarksBtn.classList.add('active');
       renderTab();
     }
 
@@ -1239,6 +1268,7 @@
       if (activeTab === 'overview' && state.builderOverviewPanel) state.builderOverviewPanel.reload();
       if (activeTab === 'clients' && state.builderClientsPanel) state.builderClientsPanel.reload();
       if (activeTab === 'projects' && state.builderProjectsPanel) state.builderProjectsPanel.reload();
+      if (activeTab === 'benchmarks' && state.builderBenchmarksPanel) state.builderBenchmarksPanel.reload();
     }
 
     state.builderPanel = {
@@ -1246,6 +1276,7 @@
         if (activeTab === 'overview' && state.builderOverviewPanel) state.builderOverviewPanel.reload(opts);
         if (activeTab === 'clients' && state.builderClientsPanel) state.builderClientsPanel.reload(opts);
         if (activeTab === 'projects' && state.builderProjectsPanel) state.builderProjectsPanel.reload(opts);
+        if (activeTab === 'benchmarks' && state.builderBenchmarksPanel) state.builderBenchmarksPanel.reload(opts);
       },
     };
 
@@ -1254,6 +1285,61 @@
       if (activeTab === 'overview') renderOverview();
       else if (activeTab === 'clients') renderClients();
       else if (activeTab === 'projects') renderProjects();
+      else if (activeTab === 'benchmarks') renderBenchmarks();
+    }
+
+    function renderBenchmarks() {
+      const panelHolder = h('div', {});
+      const toolbar = h('div', { class: 'toolbar', style: 'margin-bottom: 1rem;' },
+        h('h3', {}, t('adm.builder_benchmarks_title')),
+        h('div', { class: 'toolbar-actions' },
+          h('button', {
+            type: 'button',
+            class: 'btn btn-primary btn-sm',
+            onclick: async () => {
+              toast('Running benchmark suite...', 'info');
+              try {
+                await api.post('/api/admin/builder/benchmarks/run', {});
+                toast('Benchmark suite completed!', 'success');
+                state.builderBenchmarksPanel.reload();
+              } catch(err) {
+                toast(err.message, 'error');
+              }
+            }
+          }, icon('play'), ' ', t('adm.builder_run_benchmarks')),
+          h('button', { type: 'button', class: 'btn btn-sm', onclick: () => state.builderBenchmarksPanel.reload() }, icon('rotate-right'), ' ', t('common.refresh'))));
+
+      panelHolder.appendChild(toolbar);
+
+      state.builderBenchmarksPanel = createPanel(panelHolder, () => api.get('/api/admin/builder/benchmarks').then((r) => r.data), (benchmarks) => {
+        if (!benchmarks || !benchmarks.length) return emptyBox('adm.builder_benchmarks_empty');
+
+        const rows = benchmarks.map((b) => h('tr', {},
+          h('td', {}, h('div', { class: 'title-main' }, b.benchmark_name), h('small', { class: 'muted', dir: 'ltr' }, b.id)),
+          h('td', {}, b.model_name),
+          h('td', {}, chip(b.status, `adm.builder_status_${b.status}`)),
+          h('td', {}, Math.round((b.pass_rate || 0) * 100) + '%'),
+          h('td', {}, (b.duration_ms || 0) + 'ms'),
+          h('td', {}, fmtNumber(b.tokens_used || 0)),
+          h('td', {}, '$' + (b.cost_estimate || 0)),
+          h('td', {}, fmtDateTime(b.created_at))));
+
+        return h('div', { class: 'table-wrap' },
+          h('table', { class: 'table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, 'Benchmark'),
+              h('th', {}, 'Model'),
+              h('th', {}, t('adm.col_status')),
+              h('th', {}, 'Pass Rate'),
+              h('th', {}, 'Duration'),
+              h('th', {}, 'Tokens'),
+              h('th', {}, 'Cost'),
+              h('th', {}, t('adm.col_created_at')))),
+            h('tbody', {}, rows)));
+      });
+
+      contentHolder.appendChild(panelHolder);
+      state.builderBenchmarksPanel.reload();
     }
 
     function renderOverview() {
@@ -1410,7 +1496,7 @@
     state.timers = [];
     if (state.stats && state.stats.stop) state.stats.stop();
     if (window.Live) window.Live.reset();
-    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null });
+    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null });
     clear(appRoot);
   }
 

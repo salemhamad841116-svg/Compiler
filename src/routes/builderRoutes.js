@@ -1,7 +1,19 @@
 const express = require('express');
 const { requireAuth, requireRole, asyncHandler } = require('../auth/middleware');
+const { AppError } = require('../utils/errors');
 const builder = require('../services/builderService');
 const authService = require('../auth/authService');
+const {
+  orchestrateProject,
+  listProjectRuns,
+  getRunDetails,
+} = require('../services/engineer/orchestrator');
+const { getMemory } = require('../services/engineer/projectMemory');
+const { retrieveCodingKnowledge } = require('../services/engineer/knowledgeRetriever');
+const {
+  runBenchmarkSuite,
+  listBenchmarkResults,
+} = require('../services/engineer/benchmarkSuite');
 
 const clientRouter = express.Router();
 clientRouter.use(requireAuth());
@@ -108,6 +120,66 @@ clientRouter.post(
 );
 
 // -----------------------------------------------------------------------------
+// Engineer Intelligence & Orchestration Endpoints
+// -----------------------------------------------------------------------------
+clientRouter.post(
+  '/projects/:id/build',
+  asyncHandler(async (req, res) => {
+    builder.getProject(req.params.id, req.user.id, req.user.role === 'admin');
+    const prompt = req.body.prompt;
+    if (!prompt || !prompt.trim()) {
+      throw new AppError(400, 'PROMPT_REQUIRED', 'Prompt is required.');
+    }
+    const result = await orchestrateProject({
+      projectId: req.params.id,
+      prompt: prompt.trim(),
+      actor: req.user,
+    });
+    res.json({ success: true, data: result });
+  })
+);
+
+clientRouter.get(
+  '/projects/:id/runs',
+  asyncHandler(async (req, res) => {
+    builder.getProject(req.params.id, req.user.id, req.user.role === 'admin');
+    const data = listProjectRuns(req.params.id);
+    res.json({ success: true, data });
+  })
+);
+
+clientRouter.get(
+  '/projects/:id/runs/:runId',
+  asyncHandler(async (req, res) => {
+    builder.getProject(req.params.id, req.user.id, req.user.role === 'admin');
+    const data = getRunDetails(req.params.runId);
+    res.json({ success: true, data });
+  })
+);
+
+clientRouter.get(
+  '/projects/:id/memory',
+  asyncHandler(async (req, res) => {
+    builder.getProject(req.params.id, req.user.id, req.user.role === 'admin');
+    const data = getMemory(req.params.id);
+    res.json({ success: true, data });
+  })
+);
+
+clientRouter.get(
+  '/knowledge',
+  asyncHandler(async (req, res) => {
+    const { query = '', framework = null, limit = 10 } = req.query;
+    const data = retrieveCodingKnowledge({
+      prompt: query,
+      framework,
+      limit: parseInt(limit, 10) || 10,
+    });
+    res.json({ success: true, data });
+  })
+);
+
+// -----------------------------------------------------------------------------
 // Admin Router
 // -----------------------------------------------------------------------------
 const adminRouter = express.Router();
@@ -195,6 +267,28 @@ adminRouter.patch(
   '/requests/:id',
   asyncHandler(async (req, res) => {
     const data = builder.adminUpdateRequest(req.params.id, req.body, req.user);
+    res.json({ success: true, data });
+  })
+);
+
+adminRouter.post(
+  '/benchmarks/run',
+  asyncHandler(async (req, res) => {
+    const { taskName, modelName } = req.body;
+    const data = await runBenchmarkSuite({
+      taskName: taskName || null,
+      modelName: modelName || 'default-model',
+      actor: req.user,
+    });
+    res.json({ success: true, data });
+  })
+);
+
+adminRouter.get(
+  '/benchmarks',
+  asyncHandler(async (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+    const data = listBenchmarkResults(limit);
     res.json({ success: true, data });
   })
 );

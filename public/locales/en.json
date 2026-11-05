@@ -591,7 +591,17 @@
     "builder_preview": "Live Preview",
     "builder_code": "Source Code",
     "builder_requests_tab": "Development Requests",
-    "builder_back_to_projects": "Back to Projects"
+    "builder_back_to_projects": "Back to Projects",
+    "builder_tab_benchmarks": "Continuous Benchmarks",
+    "builder_run_benchmarks": "Run Evaluation Suite",
+    "builder_benchmarks_title": "Automated Benchmark & Quality Suite",
+    "builder_benchmarks_empty": "No benchmark evaluations run yet.",
+    "builder_auto_build": "Build & Verify",
+    "builder_building": "Building & Testing...",
+    "builder_verified": "Verified",
+    "builder_test_runs": "Test Runs & Self-Repair",
+    "builder_status_verified": "Verified & Tested",
+    "builder_status_repair_exhausted": "Repair Exhausted"
   },
   "cat": {
     "title": "Categories",
@@ -783,7 +793,9 @@
     "INVALID_STATUS": "Invalid status specified.",
     "PROJECT_NOT_FOUND": "The software project was not found.",
     "PROMPT_REQUIRED": "Development prompt or instruction is required.",
-    "REQUEST_NOT_FOUND": "Development request was not found."
+    "REQUEST_NOT_FOUND": "Development request was not found.",
+    "RUN_NOT_FOUND": "Test execution run not found.",
+    "BENCHMARK_FAILED": "Benchmark evaluation failed."
   },
   "set": {
     "keys_title": "AI API Keys",

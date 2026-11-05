@@ -67,7 +67,7 @@
     const reqInput = h('textarea', { class: 'input', rows: 3, placeholder: t('adm.builder_request_placeholder') });
     const sendReqBtn = h('button', {
       type: 'button',
-      class: 'btn btn-primary btn-sm',
+      class: 'btn btn-sm',
       style: 'margin-top: 8px;',
       onclick: async () => {
         if (!reqInput.value.trim()) return;
@@ -78,10 +78,38 @@
       },
     }, icon('paper-plane'), ' ', t('adm.builder_submit_request'));
 
-    const reqHistoryHolder = h('div', { style: 'flex: 1; overflow-y: auto; padding: 12px;' });
-    const reqForm = h('div', { style: 'padding: 12px; border-bottom: 1px solid var(--border);' }, reqInput, sendReqBtn);
-    leftPane.append(leftHeader, reqForm, reqHistoryHolder);
+    const buildBtn = h('button', {
+      type: 'button',
+      class: 'btn btn-primary btn-sm',
+      style: 'margin-top: 8px; margin-inline-start: 8px;',
+      onclick: async () => {
+        const promptText = reqInput.value.trim() || project.prompt || project.name;
+        if (!promptText) return;
+        buildBtn.disabled = true;
+        buildBtn.textContent = t('adm.builder_building');
+        try {
+          const res = await api.post(`/api/builder/projects/${project.id}/build`, { prompt: promptText });
+          if (res.data && res.data.assembledHtml) {
+            codeArea.value = res.data.assembledHtml;
+            updatePreview();
+          }
+          toast(t('adm.builder_status_verified'), 'success');
+          reloadProject();
+        } catch (err) {
+          toast(err.message || 'Build failed', 'error');
+        } finally {
+          buildBtn.disabled = false;
+          buildBtn.innerHTML = '';
+          buildBtn.append(icon('bolt'), ' ', t('adm.builder_auto_build'));
+        }
+      },
+    }, icon('bolt'), ' ', t('adm.builder_auto_build'));
 
+    const testRunsHolder = h('div', { style: 'padding: 12px; border-bottom: 1px solid var(--border); background: var(--bg-surface);' });
+    const reqHistoryHolder = h('div', { style: 'flex: 1; overflow-y: auto; padding: 12px;' });
+    const reqForm = h('div', { style: 'padding: 12px; border-bottom: 1px solid var(--border);' }, reqInput, h('div', { style: 'display: flex;' }, sendReqBtn, buildBtn));
+    leftPane.append(leftHeader, reqForm, testRunsHolder, reqHistoryHolder);
+    
     // Right pane: code & live preview
     const rightPane = h('div', { class: 'builder-preview-pane' });
     let activeRightTab = 'preview';
@@ -132,6 +160,30 @@
       const res = await api.get(`/api/builder/projects/${project.id}`);
       const full = res.data;
       clear(reqHistoryHolder);
+      clear(testRunsHolder);
+
+      // Fetch runs
+      try {
+        const runsRes = await api.get(`/api/builder/projects/${project.id}/runs`);
+        const runs = runsRes.data || [];
+        if (runs.length > 0) {
+          const latest = runs[0];
+          const tr = latest.testReport || {};
+          const isVerified = latest.status === 'passed';
+          const badgeClass = isVerified ? 'badge-ok' : 'badge-warn';
+          testRunsHolder.appendChild(h('div', {},
+            h('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;' },
+              h('strong', { style: 'font-size: 0.85rem;' }, icon('vial-circle-check'), ' ', t('adm.builder_test_runs')),
+              h('span', { class: `badge ${badgeClass}` }, isVerified ? t('adm.builder_verified') : latest.status)),
+            h('div', { style: 'font-size: 0.78rem; color: var(--muted); display: flex; gap: 8px;' },
+              h('span', {}, 'Pass Rate: ' + Math.round((tr.passRate || 0) * 100) + '%'),
+              h('span', {}, 'Duration: ' + (latest.duration_ms || 0) + 'ms'),
+              h('span', {}, 'Repairs: ' + (latest.repair_attempts || 0)))));
+        }
+      } catch (e) {
+        // Runs fetch optional
+      }
+
       const reqs = full.requests || [];
       if (!reqs.length) {
         reqHistoryHolder.appendChild(emptyBox('adm.builder_no_requests'));

@@ -380,6 +380,141 @@ CREATE INDEX IF NOT EXISTS idx_app_files_project ON app_project_files(project_id
       `);
     },
   },
+  {
+    // Phase 7: Engineer Advanced Intelligence & Continuous Improvement
+    id: 7,
+    name: 'engineer_intelligence_v2',
+    sql: `
+CREATE TABLE IF NOT EXISTS app_project_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  plan_json TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'testing', 'verified', 'failed')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_versions_project ON app_project_versions(project_id, version_number);
+
+CREATE TABLE IF NOT EXISTS app_project_files_v2 (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  version_id TEXT NOT NULL REFERENCES app_project_versions(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  content TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  requirement_ids TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_files_v2_version ON app_project_files_v2(version_id);
+CREATE INDEX IF NOT EXISTS idx_app_files_v2_project ON app_project_files_v2(project_id);
+
+CREATE TABLE IF NOT EXISTS app_project_memory (
+  project_id TEXT PRIMARY KEY REFERENCES app_projects(id) ON DELETE CASCADE,
+  tech_stack TEXT NOT NULL DEFAULT '{}',
+  decisions TEXT NOT NULL DEFAULT '[]',
+  learned_fixes TEXT NOT NULL DEFAULT '[]',
+  summary TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_project_runs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  version_id TEXT REFERENCES app_project_versions(id) ON DELETE CASCADE,
+  run_type TEXT NOT NULL DEFAULT 'build_and_test' CHECK (run_type IN ('build_and_test', 'repair', 'manual_test')),
+  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'passed', 'failed', 'repaired')),
+  test_report_json TEXT,
+  logs_json TEXT,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  repair_attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_runs_project ON app_project_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_app_runs_status ON app_project_runs(status);
+
+CREATE TABLE IF NOT EXISTS app_benchmark_results (
+  id TEXT PRIMARY KEY,
+  benchmark_name TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('passed', 'failed', 'running')),
+  pass_rate REAL NOT NULL DEFAULT 0.0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  cost_estimate REAL NOT NULL DEFAULT 0.0,
+  report_json TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_benchmarks_name ON app_benchmark_results(benchmark_name);
+`,
+    up(handle) {
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS app_project_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  plan_json TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'testing', 'verified', 'failed')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_versions_project ON app_project_versions(project_id, version_number);
+
+CREATE TABLE IF NOT EXISTS app_project_files_v2 (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  version_id TEXT NOT NULL REFERENCES app_project_versions(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  content TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  requirement_ids TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_files_v2_version ON app_project_files_v2(version_id);
+CREATE INDEX IF NOT EXISTS idx_app_files_v2_project ON app_project_files_v2(project_id);
+
+CREATE TABLE IF NOT EXISTS app_project_memory (
+  project_id TEXT PRIMARY KEY REFERENCES app_projects(id) ON DELETE CASCADE,
+  tech_stack TEXT NOT NULL DEFAULT '{}',
+  decisions TEXT NOT NULL DEFAULT '[]',
+  learned_fixes TEXT NOT NULL DEFAULT '[]',
+  summary TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_project_runs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES app_projects(id) ON DELETE CASCADE,
+  version_id TEXT REFERENCES app_project_versions(id) ON DELETE CASCADE,
+  run_type TEXT NOT NULL DEFAULT 'build_and_test' CHECK (run_type IN ('build_and_test', 'repair', 'manual_test')),
+  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'passed', 'failed', 'repaired')),
+  test_report_json TEXT,
+  logs_json TEXT,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  repair_attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_runs_project ON app_project_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_app_runs_status ON app_project_runs(status);
+
+CREATE TABLE IF NOT EXISTS app_benchmark_results (
+  id TEXT PRIMARY KEY,
+  benchmark_name TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('passed', 'failed', 'running')),
+  pass_rate REAL NOT NULL DEFAULT 0.0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  tokens_used INTEGER NOT NULL DEFAULT 0,
+  cost_estimate REAL NOT NULL DEFAULT 0.0,
+  report_json TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_benchmarks_name ON app_benchmark_results(benchmark_name);
+      `);
+    },
+  },
 ];
 
 function openDb() {

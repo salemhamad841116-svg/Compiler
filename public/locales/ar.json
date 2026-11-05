@@ -591,7 +591,17 @@
     "builder_preview": "المعاينة الحية",
     "builder_code": "كود المصدر",
     "builder_requests_tab": "طلبات التطوير",
-    "builder_back_to_projects": "العودة للمشاريع"
+    "builder_back_to_projects": "العودة للمشاريع",
+    "builder_tab_benchmarks": "معايير التقييم المستمر",
+    "builder_run_benchmarks": "تشغيل حزمة المعايير",
+    "builder_benchmarks_title": "حزمة التقييم الذاتي ومعايير الجودة",
+    "builder_benchmarks_empty": "لم يتم تشغيل اختبارات تقييم بعد.",
+    "builder_auto_build": "تطوير واختبار ذكي",
+    "builder_building": "جاري التطوير والاختبار...",
+    "builder_verified": "تم التحقق والاختبار",
+    "builder_test_runs": "سجل الاختبارات والإصلاح الذاتي",
+    "builder_status_verified": "تم التحقق والاختبار بنجاح",
+    "builder_status_repair_exhausted": "استُنفدت محاولات الإصلاح"
   },
   "cat": {
     "title": "التصنيفات",
@@ -783,7 +793,9 @@
     "INVALID_STATUS": "الحالة المحددة غير صالحة.",
     "PROJECT_NOT_FOUND": "المشروع البرمجي غير موجود.",
     "PROMPT_REQUIRED": "طلب التطوير أو الأمر البرمجي مطلوب.",
-    "REQUEST_NOT_FOUND": "طلب التطوير غير موجود."
+    "REQUEST_NOT_FOUND": "طلب التطوير غير موجود.",
+    "RUN_NOT_FOUND": "لم يتم العثور على تشغيل الاختبار المطلوب.",
+    "BENCHMARK_FAILED": "فشل تنفيذ معيار التقييم البرمجي."
   },
   "set": {
     "keys_title": "مفاتيح API للذكاء الاصطناعي",
