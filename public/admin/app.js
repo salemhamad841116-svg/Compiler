@@ -11,7 +11,7 @@
   const authRoot = document.getElementById('authRoot');
   const appRoot = document.getElementById('appRoot');
 
-  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null, timers: [], listeners: [] };
+  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null, voicesPanel: null, timers: [], listeners: [] };
 
   // ------------------------------------------------------------------ shared lists
   function notifyCategoryConsumers() {
@@ -1490,13 +1490,263 @@
   }
 
 
+
+  // ------------------------------------------------------------------ voices
+  function buildVoices(root) {
+    const toolbar = h('div', { class: 'toolbar' },
+      h('div', {},
+        h('h2', {}, t('adm.voices_title')),
+        h('p', { class: 'muted' }, t('adm.voices_subtitle'))),
+      h('div', { class: 'toolbar-actions' },
+        h('button', {
+          type: 'button',
+          class: 'btn btn-primary btn-sm',
+          onclick: () => addVoiceDialog(() => state.voicesPanel.reload())
+        }, icon('plus'), ' ', t('adm.voices_add')),
+        h('button', {
+          type: 'button',
+          class: 'btn btn-sm',
+          onclick: () => state.voicesPanel.reload()
+        }, icon('rotate-right'), ' ', t('common.refresh'))));
+
+    const contentHolder = h('div', {});
+    root.append(toolbar, contentHolder);
+
+    state.voicesPanel = createPanel(contentHolder, () => api.get('/api/admin/voices').then((r) => r.data), (voices) => {
+      if (!voices || !voices.length) return emptyBox('adm.voices_empty');
+
+      const btn = (ic, key, fn, cls = '') => h('button', {
+        type: 'button',
+        class: `icon-btn ${cls}`,
+        title: t(key),
+        'aria-label': t(key),
+        onclick: fn
+      }, icon(ic));
+
+      const rows = voices.map((v) => {
+        const audioEl = h('audio', {
+          controls: '',
+          preload: 'none',
+          style: 'height: 32px; max-width: 220px; vertical-align: middle;',
+          src: `/api/admin/voices/${v.id}/audio`
+        });
+
+        const durText = `${fmtNumber(v.duration_seconds)} ${t('adm.voice_seconds')}`;
+
+        return h('tr', {},
+          h('td', {},
+            h('div', { class: 'title-main' }, v.name),
+            h('small', { class: 'muted', dir: 'ltr' }, v.id)),
+          h('td', {}, v.description || '-'),
+          h('td', {}, h('span', { class: 'chip' }, durText)),
+          h('td', {}, audioEl),
+          h('td', {}, chip(v.is_active ? 'active' : 'disabled', v.is_active ? 'adm.voice_status_active' : 'adm.voice_status_inactive')),
+          h('td', {}, fmtDateTime(v.created_at)),
+          h('td', { class: 'actions' },
+            btn('wand-magic-sparkles', 'adm.voice_test_tts', () => testVoiceDialog(v), 'btn-test-tts'),
+            btn('pen-to-square', 'common.edit', () => editVoiceDialog(v, () => state.voicesPanel.reload())),
+            btn('trash', 'common.delete', () => deleteVoiceConfirm(v, () => state.voicesPanel.reload()), 'danger')));
+      });
+
+      const head = h('tr', {}, [
+        'adm.col_voice_name',
+        'adm.voice_desc_label',
+        'adm.col_voice_duration',
+        'adm.col_voice_player',
+        'adm.col_status',
+        'adm.col_voice_created',
+        'common.actions'
+      ].map((k) => h('th', {}, t(k))));
+
+      return h('div', { class: 'table-wrap' },
+        h('table', { class: 'table' },
+          h('thead', {}, head),
+          h('tbody', {}, rows)));
+    });
+
+    state.voicesPanel.reload();
+  }
+
+  function addVoiceDialog(onSuccess) {
+    const nameInput = h('input', { type: 'text', class: 'input', placeholder: t('adm.voice_name_label'), required: true });
+    const descInput = h('textarea', { class: 'input', rows: 2, placeholder: t('adm.voice_desc_label') });
+    const fileInput = h('input', { type: 'file', class: 'input', accept: '.wav,.mp3,audio/wav,audio/mpeg', required: true });
+    const durHint = h('p', { class: 'muted', style: 'margin-top: 4px; font-size: 0.85rem;' }, t('adm.voice_file_help'));
+
+    let detectedDuration = 0;
+
+    fileInput.onchange = () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const audio = new Audio();
+      audio.src = url;
+      audio.onloadedmetadata = () => {
+        detectedDuration = audio.duration;
+        if (detectedDuration > 15.5) {
+          durHint.textContent = t('adm.voice_duration_exceeded_client');
+          durHint.className = 'bad-text';
+          saveBtn.disabled = true;
+        } else {
+          durHint.textContent = `${detectedDuration.toFixed(1)} ${t('adm.voice_seconds')} / 15 ${t('adm.voice_seconds')}`;
+          durHint.className = 'muted';
+          saveBtn.disabled = false;
+        }
+      };
+    };
+
+    const saveBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('plus'), ' ', t('adm.voices_add'));
+    const cancelBtn = h('button', { type: 'button', class: 'btn', onclick: () => dlg.close() }, t('common.cancel'));
+
+    const form = h('form', { class: 'form-col' },
+      field(t('adm.voice_name_label'), nameInput),
+      field(t('adm.voice_desc_label'), descInput),
+      field(t('adm.voice_file_label'), fileInput, durHint),
+      h('div', { class: 'modal-actions' }, cancelBtn, saveBtn));
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return toastError(t('errors.VOICE_FILE_REQUIRED'));
+      if (detectedDuration > 15.5) return toastError(t('adm.voice_duration_exceeded_client'));
+
+      saveBtn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append('name', nameInput.value.trim());
+        fd.append('description', descInput.value.trim());
+        fd.append('duration', String(detectedDuration || 0));
+        fd.append('file', file);
+
+        const res = await fetch('/api/admin/voices', {
+          method: 'POST',
+          body: fd,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message || json.error || t('common.error'));
+
+        toast(t('adm.voice_created_success'), 'success');
+        dlg.close();
+        if (onSuccess) onSuccess();
+      } catch (err) {
+        toastError(err.message);
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+
+    const dlg = modal(t('adm.voice_add_modal_title'), form);
+    setTimeout(() => nameInput.focus(), 50);
+  }
+
+  function editVoiceDialog(voice, onSuccess) {
+    const nameInput = h('input', { type: 'text', class: 'input', value: voice.name, required: true });
+    const descInput = h('textarea', { class: 'input', rows: 2 }, voice.description || '');
+    const activeCheck = h('input', { type: 'checkbox', checked: !!voice.is_active });
+
+    const saveBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('check'), ' ', t('common.save'));
+    const cancelBtn = h('button', { type: 'button', class: 'btn', onclick: () => dlg.close() }, t('common.cancel'));
+
+    const form = h('form', { class: 'form-col' },
+      field(t('adm.voice_name_label'), nameInput),
+      field(t('adm.voice_desc_label'), descInput),
+      h('label', { style: 'display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer;' },
+        activeCheck,
+        h('span', {}, t('adm.voice_status_active'))),
+      h('div', { class: 'modal-actions' }, cancelBtn, saveBtn));
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      try {
+        await api.put(`/api/admin/voices/${voice.id}`, {
+          name: nameInput.value.trim(),
+          description: descInput.value.trim(),
+          isActive: activeCheck.checked,
+        });
+        toast(t('adm.voice_updated_success'), 'success');
+        dlg.close();
+        if (onSuccess) onSuccess();
+      } catch (err) {
+        toastError(err.message);
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+
+    const dlg = modal(t('adm.voice_edit_modal_title'), form);
+  }
+
+  function deleteVoiceConfirm(voice, onSuccess) {
+    confirmDialog({
+      title: t('common.confirm'),
+      message: t('adm.voice_delete_confirm'),
+      onConfirm: async () => {
+        try {
+          await api.delete(`/api/admin/voices/${voice.id}`);
+          toast(t('adm.voice_deleted_success'), 'success');
+          if (onSuccess) onSuccess();
+        } catch (err) {
+          toastError(err.message);
+        }
+      }
+    });
+  }
+
+  function testVoiceDialog(voice) {
+    const textInput = h('textarea', {
+      class: 'input',
+      rows: 3,
+      placeholder: t('adm.voice_test_input_placeholder')
+    });
+    textInput.value = t('adm.voice_test_sample_text');
+
+    const playerHolder = h('div', { style: 'margin-top: 12px; display: none;' },
+      h('label', { style: 'display: block; font-weight: 600; margin-bottom: 6px;' }, t('adm.voice_test_result_label')),
+      h('audio', { controls: '', autoplay: '', style: 'width: 100%;' }));
+
+    const runBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, icon('wand-magic-sparkles'), ' ', t('adm.voice_test_btn'));
+    const closeBtn = h('button', { type: 'button', class: 'btn', onclick: () => dlg.close() }, t('common.close'));
+
+    const form = h('form', { class: 'form-col' },
+      field(t('adm.voice_test_input_label'), textInput),
+      playerHolder,
+      h('div', { class: 'modal-actions' }, closeBtn, runBtn));
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const txt = textInput.value.trim();
+      if (!txt) return;
+
+      runBtn.disabled = true;
+      try {
+        const res = await api.post(`/api/admin/voices/${voice.id}/test-tts`, { text: txt });
+        if (res.audioBase64) {
+          const audioEl = playerHolder.querySelector('audio');
+          audioEl.src = `data:${res.mimeType};base64,${res.audioBase64}`;
+          playerHolder.style.display = 'block';
+          audioEl.play().catch(() => {});
+        }
+      } catch (err) {
+        toastError(err.message);
+      } finally {
+        runBtn.disabled = false;
+      }
+    };
+
+    const dlg = modal(t('adm.voice_test_modal_title', { name: voice.name }), form);
+  }
+
   // ------------------------------------------------------------------ app
   function teardown() {
     state.timers.forEach(clearInterval);
     state.timers = [];
     if (state.stats && state.stats.stop) state.stats.stop();
     if (window.Live) window.Live.reset();
-    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null });
+    Object.assign(state, { categories: [], supervisors: [], shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, searchCats: null, perSupervisor: null, settingsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null, voicesPanel: null });
     clear(appRoot);
   }
 
@@ -1521,6 +1771,7 @@
       { id: 'overview', labelKey: 'adm.nav_overview', icon: 'gauge-high' },
       { id: 'analytics', labelKey: 'adm.nav_analytics', icon: 'chart-pie' },
       { id: 'builder', labelKey: 'adm.nav_builder', icon: 'laptop-code' },
+      { id: 'voices', labelKey: 'adm.nav_voices', icon: 'microphone-lines' },
       { id: 'supervisors', labelKey: 'adm.nav_supervisors', icon: 'users-gear' },
       { id: 'presence', labelKey: 'adm.nav_presence', icon: 'signal' },
       { id: 'categories', labelKey: 'adm.nav_categories', icon: 'tags' },
@@ -1546,6 +1797,7 @@
           if (id === 'categories' && state.catPanel) state.catPanel.reload({ silent: true });
           if (id === 'settings' && state.settingsPanel) state.settingsPanel.reload({ silent: true });
           if (id === 'builder' && state.builderPanel) state.builderPanel.reload({ silent: true });
+          if (id === 'voices' && state.voicesPanel) state.voicesPanel.reload({ silent: true });
         }
       },
     });
@@ -1562,6 +1814,7 @@
     buildPresence(S.presence);
     buildCategories(S.categories);
     buildBuilder(S.builder);
+    buildVoices(S.voices);
 
     state.docs = window.Widgets.mountDocuments(S.documents, {
       admin: true, getCategories: () => state.categories, getSupervisors: () => state.supervisors,

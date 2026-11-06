@@ -515,6 +515,31 @@ CREATE INDEX IF NOT EXISTS idx_benchmarks_name ON app_benchmark_results(benchmar
       `);
     },
   },
+  {
+    id: 8,
+    name: 'voice_library',
+    up(handle) {
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS voice_library (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  speaker_gender TEXT DEFAULT 'unspecified',
+  language TEXT DEFAULT 'ar',
+  description TEXT,
+  filename TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  duration_seconds REAL NOT NULL DEFAULT 0.0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  created_by TEXT REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_voice_library_active ON voice_library(is_active);
+CREATE INDEX IF NOT EXISTS idx_voice_library_created ON voice_library(created_at);
+      `);
+    },
+  },
 ];
 
 function openDb() {

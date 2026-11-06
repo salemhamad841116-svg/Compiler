@@ -81,6 +81,9 @@ function createApp() {
   const builderRoutes = require('./routes/builderRoutes');
   app.use('/api/builder', builderRoutes.clientRouter);
   app.use('/api/admin/builder', builderRoutes.adminRouter);
+  const voiceRoutes = require('./routes/voiceRoutes');
+  app.use('/api/voices', voiceRoutes.publicRouter);
+  app.use('/api/admin/voices', voiceRoutes.adminRouter);
   // Real-time document / settings events (Server-Sent Events). Same-origin cookie auth.
   app.get('/api/events', requireAuth(), require('./services/eventBus').sseHandler);
   app.use('/api', notFoundApi);
