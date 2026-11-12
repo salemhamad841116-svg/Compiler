@@ -20,7 +20,9 @@ function userSnapshot(userOrId) {
  * @param {Object} [e.doc] - document row used to snapshot descriptive fields
  */
 function record(e) {
-  const actor = e.actor ? { id: e.actor.id, name: e.actor.name, role: e.actor.role } : SYSTEM_ACTOR;
+  const actor = e.actor
+    ? { id: e.actor.id || null, name: e.actor.name || null, role: e.actor.role || null }
+    : SYSTEM_ACTOR;
   const doc = e.doc || null;
   const supervisor = userSnapshot(e.supervisor !== undefined ? e.supervisor : doc && doc.owner_id);
   const categoryId = e.categoryId !== undefined ? e.categoryId : doc && doc.category_id;

@@ -11,7 +11,7 @@
   const authRoot = document.getElementById('authRoot');
   const appRoot = document.getElementById('appRoot');
 
-  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null, voicesPanel: null, timers: [], listeners: [] };
+  const state = { categories: [], supervisors: [], catError: null, supError: null, shell: null, uploader: null, docs: null, activity: null, stats: null, supPanel: null, catPanel: null, presencePanel: null, analyticsPanel: null, builderPanel: null, builderOverviewPanel: null, builderClientsPanel: null, builderProjectsPanel: null, builderBenchmarksPanel: null, voicesPanel: null, serviceKeysPanel: null, timers: [], listeners: [] };
 
   // ------------------------------------------------------------------ shared lists
   function notifyCategoryConsumers() {
@@ -514,6 +514,97 @@
       h('div', { class: 'kv-grid' }, kv(t('sys.vault_files'), `${fmtNumber(rep.vault.files)} (${fmtBytes(rep.vault.bytes)})`), kv(t('sys.db_documents'), fmtNumber(rep.database.documents)), counts), actions, unrec);
   }
 
+  function inspectErrorModal(err) {
+    let dlg;
+    const closeBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => dlg.close() }, t('common.close'));
+    const content = h('div', { class: 'form-col' },
+      h('div', { class: 'kv-grid' },
+        kv(t('sys.col_err_time'), fmtDateTime(err.timestamp)),
+        kv(t('sys.col_err_code'), h('code', { dir: 'ltr' }, err.errorCode || '-')),
+        kv(t('sys.err_status_code'), h('span', { class: `pill ${err.statusCode >= 500 ? 'bad' : 'warn'}` }, String(err.statusCode))),
+        kv(t('sys.col_err_severity'), chip(err.severity === 'fatal' ? 'failed' : 'pending', err.severity)),
+        kv(t('sys.col_err_endpoint'), h('code', { dir: 'ltr' }, `${err.method || ''} ${err.endpoint || '-'}`)),
+        kv(t('sys.err_actor'), err.actorEmail ? `${err.actorEmail} (${err.actorId || ''})` : '-'),
+        kv(t('sys.err_ip'), err.ip || '-')),
+      h('div', { class: 'field' },
+        h('label', { class: 'label' }, t('sys.col_err_msg')),
+        h('div', { class: 'notice notice-warn', dir: 'auto' }, err.message)),
+      err.stack ? h('div', { class: 'field' },
+        h('label', { class: 'label' }, t('sys.err_stack')),
+        h('pre', { class: 'code-block', dir: 'ltr', style: 'max-height: 220px; overflow-y: auto; font-size: 12px; background: #0f172a; color: #f87171; padding: 10px; border-radius: 6px;' }, err.stack)) : null,
+      h('div', { class: 'modal-actions' }, closeBtn));
+
+    dlg = modal(t('sys.err_details_title'), content);
+  }
+
+  function errorTrackingTable(data) {
+    const items = data.data || [];
+    const stats = data.stats || {};
+    const n = fmtNumber;
+
+    const statsRow = h('div', { class: 'stats-grid', style: 'margin-bottom: 1rem;' },
+      statCard({ iconName: 'bug', label: t('sys.err_total'), value: n(stats.total || 0), tone: stats.total > 0 ? 'tone-bad' : 'tone-ok' }),
+      statCard({ iconName: 'clock', label: t('sys.err_24h'), value: n(stats.last24h || 0), tone: stats.last24h > 0 ? 'tone-warn' : 'tone-ok' }),
+      statCard({ iconName: 'triangle-exclamation', label: t('sys.err_fatal'), value: n(stats.fatal || 0), tone: stats.fatal > 0 ? 'tone-bad' : 'tone-ok' }),
+      statCard({ iconName: 'calendar-check', label: t('sys.err_last'), value: stats.lastErrorAt ? fmtRelative(stats.lastErrorAt) : t('adm.never') }));
+
+    if (!items.length) {
+      return h('div', {}, statsRow, emptyBox('sys.errors_empty'));
+    }
+
+    const head = h('tr', {},
+      h('th', {}, t('sys.col_err_time')),
+      h('th', {}, t('sys.col_err_severity')),
+      h('th', {}, t('sys.col_err_endpoint')),
+      h('th', {}, t('sys.col_err_code')),
+      h('th', {}, t('sys.col_err_msg')),
+      h('th', {}, ''));
+
+    const rows = items.map((err) => {
+      const inspectBtn = h('button', { type: 'button', class: 'btn btn-xs', onclick: () => inspectErrorModal(err) }, icon('eye'), ' ', t('sys.inspect_error'));
+      return h('tr', {},
+        h('td', {}, h('div', { class: 'title-main' }, fmtRelative(err.timestamp)), h('small', { class: 'muted', dir: 'ltr' }, fmtDateTime(err.timestamp))),
+        h('td', {}, chip(err.severity === 'fatal' ? 'failed' : 'pending', err.severity)),
+        h('td', {}, h('code', { dir: 'ltr' }, `${err.method || ''} ${err.endpoint || '-'}`)),
+        h('td', {}, h('span', { class: 'pill' }, err.errorCode || '-')),
+        h('td', { style: 'max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' }, err.message),
+        h('td', {}, inspectBtn));
+    });
+
+    return h('div', {},
+      statsRow,
+      h('div', { class: 'table-wrap' }, h('table', { class: 'table' }, h('thead', {}, head), h('tbody', {}, rows))));
+  }
+
+  function buildErrorTrackingCard() {
+    const holder = h('div', {});
+    let panel;
+    const refreshBtn = h('button', { type: 'button', class: 'btn btn-sm', onclick: () => panel.reload() }, icon('rotate-right'), ' ', t('common.refresh'));
+    const clearBtn = h('button', { type: 'button', class: 'btn btn-sm bad-btn', onclick: async () => {
+      if (!(await confirmDialog({ title: t('sys.clear_errors'), message: t('sys.clear_errors_confirm'), confirmLabel: t('sys.clear_errors'), kind: 'bad' }))) return;
+      clearBtn.disabled = true;
+      try {
+        await api.post('/api/admin/system/errors/clear', {});
+        toast(t('sys.clear_errors_done'), 'success');
+        panel.reload();
+      } catch (e) {
+        toastError(e);
+      } finally {
+        clearBtn.disabled = false;
+      }
+    } }, icon('trash-can'), ' ', t('sys.clear_errors'));
+
+    panel = createPanel(holder, () => api.get('/api/admin/system/errors?limit=50'), errorTrackingTable);
+    panel.reload();
+
+    return h('div', { class: 'card' },
+      h('div', { class: 'toolbar' },
+        h('h2', {}, t('sys.error_tracking_title')),
+        h('div', { class: 'toolbar-actions' }, refreshBtn, clearBtn)),
+      h('p', { class: 'muted' }, t('sys.error_tracking_hint')),
+      holder);
+  }
+
   function buildSystem(root) {
     // health
     const healthHolder = h('div', {});
@@ -598,6 +689,7 @@
 
     root.append(
       h('div', { class: 'card' }, h('div', { class: 'toolbar' }, h('h2', {}, t('sys.health_title')), h('div', { class: 'toolbar-actions' }, checkBtn, retryAllBtn, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => healthPanel.reload() }, icon('rotate-right'), ' ', t('common.refresh')))), healthHolder),
+      buildErrorTrackingCard(),
       h('div', { class: 'card' }, h('div', { class: 'toolbar' }, h('h2', {}, t('sys.reconcile_title')), h('div', { class: 'toolbar-actions' },
         h('button', { type: 'button', class: 'btn btn-sm', onclick: () => runRec(false) }, icon('magnifying-glass-chart'), ' ', t('sys.reconcile_analyze')),
         h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => runRec(true) }, icon('screwdriver-wrench'), ' ', t('sys.reconcile_apply')))),
@@ -1740,6 +1832,212 @@
     const dlg = modal(t('adm.voice_test_modal_title', { name: voice.name }), form);
   }
 
+
+  // ------------------------------------------------------------------ service keys
+  function buildServiceKeys(root) {
+    const listHolder = h('div', { class: 'card-content' });
+
+    async function reload() {
+      clear(listHolder);
+      listHolder.appendChild(h('div', { class: 'text-muted p-3' }, t('common.loading')));
+      try {
+        const res = await api.get('/api/admin/service-keys');
+        const keys = res.keys || [];
+        renderKeysList(keys);
+      } catch (err) {
+        clear(listHolder);
+        listHolder.appendChild(errorBox(err.message, reload));
+      }
+    }
+
+    function renderKeysList(keys) {
+      clear(listHolder);
+      if (!keys.length) {
+        listHolder.appendChild(emptyBox(t('adm.service_keys_empty')));
+        return;
+      }
+
+      const table = h('table', { class: 'table' },
+        h('thead', {},
+          h('tr', {},
+            h('th', {}, t('adm.service_keys_col_name')),
+            h('th', {}, t('adm.service_keys_col_prefix')),
+            h('th', {}, t('adm.service_keys_col_scope')),
+            h('th', {}, t('adm.service_keys_col_spaces')),
+            h('th', {}, t('adm.service_keys_col_status')),
+            h('th', {}, t('adm.service_keys_col_last_used')),
+            h('th', { class: 'text-end' }, t('adm.service_keys_col_actions'))
+          )
+        )
+      );
+
+      const tbody = h('tbody', {});
+      keys.forEach((k) => {
+        const isRevoked = !k.isActive || !!k.revokedAt;
+        const statusBadge = isRevoked
+          ? chip(t('adm.service_keys_status_revoked'), 'danger')
+          : chip(t('adm.service_keys_status_active'), 'success');
+
+        const spacesText = (k.allowedCategoryIds && k.allowedCategoryIds.includes('*'))
+          ? t('adm.service_keys_all_categories')
+          : (k.allowedCategoryIds || []).join(', ') || '-';
+
+        const revokeBtn = isRevoked ? null : h('button', {
+          class: 'btn btn-sm btn-danger',
+          onclick: () => revokeServiceKeyConfirm(k, reload)
+        }, icon('ban'), ' ', t('adm.service_keys_revoke_btn'));
+
+        const tr = h('tr', {},
+          h('td', {},
+            h('strong', {}, k.name),
+            h('div', { class: 'text-muted text-sm' }, k.appSlug)
+          ),
+          h('td', {}, h('code', {}, k.keyPrefix)),
+          h('td', {}, chip(k.scope, 'neutral')),
+          h('td', { class: 'text-sm' }, spacesText),
+          h('td', {}, statusBadge),
+          h('td', { class: 'text-sm text-muted' }, k.lastUsedAt ? fmtRelative(k.lastUsedAt) : '-'),
+          h('td', { class: 'text-end' }, revokeBtn || '-')
+        );
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      listHolder.appendChild(table);
+    }
+
+    const newBtn = h('button', {
+      class: 'btn btn-primary',
+      onclick: () => createServiceKeyModal(reload)
+    }, icon('plus'), ' ', t('adm.service_keys_create_btn'));
+
+    const header = h('div', { class: 'card-header' },
+      h('div', {},
+        h('h3', { class: 'card-title' }, t('adm.service_keys_title')),
+        h('p', { class: 'card-subtitle' }, t('adm.service_keys_subtitle'))
+      ),
+      h('div', { class: 'card-actions' }, newBtn)
+    );
+
+    const card = h('div', { class: 'card' }, header, listHolder);
+    root.appendChild(card);
+    reload();
+
+    state.serviceKeysPanel = { reload };
+  }
+
+  function revokeServiceKeyConfirm(k, onSuccess) {
+    confirmDialog({
+      title: t('common.confirm'),
+      message: t('adm.service_keys_revoke_confirm'),
+      onConfirm: async () => {
+        try {
+          await api.post(`/api/admin/service-keys/${k.id}/revoke`);
+          toast(t('adm.service_keys_revoked_success'), 'success');
+          if (onSuccess) onSuccess();
+        } catch (err) {
+          toastError(err.message);
+        }
+      }
+    });
+  }
+
+  function createServiceKeyModal(onSuccess) {
+    const nameInput = h('input', { class: 'input', placeholder: t('adm.service_keys_name_placeholder') });
+    const slugInput = h('input', { class: 'input', placeholder: t('adm.service_keys_slug_placeholder') });
+
+    const scopeSelect = h('select', { class: 'select' },
+      h('option', { value: 'read' }, t('adm.service_keys_scope_read')),
+      h('option', { value: 'write' }, t('adm.service_keys_scope_write')),
+      h('option', { value: 'sync' }, t('adm.service_keys_scope_sync')),
+      h('option', { value: 'admin' }, t('adm.service_keys_scope_admin'))
+    );
+
+    const categoriesHolder = h('div', { class: 'checkbox-grid', style: 'max-height: 140px; overflow-y: auto;' });
+    (state.categories || []).forEach((cat) => {
+      const cb = h('input', { type: 'checkbox', value: cat.id });
+      const lbl = h('label', { class: 'checkbox-label' }, cb, ' ', cat.name);
+      categoriesHolder.appendChild(lbl);
+    });
+
+    let dlg;
+    const cancelBtn = h('button', { type: 'button', class: 'btn', onclick: () => dlg.close() }, t('common.cancel'));
+    const submitBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, t('adm.service_keys_create_submit'));
+
+    const form = h('form', { class: 'form-col' },
+      field(t('adm.service_keys_name_label'), nameInput),
+      field(t('adm.service_keys_slug_label'), slugInput),
+      field(t('adm.service_keys_scope_label'), scopeSelect),
+      field(t('adm.service_keys_spaces_label'), categoriesHolder),
+      h('div', { class: 'modal-actions' }, cancelBtn, submitBtn)
+    );
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = nameInput.value.trim();
+      const appSlug = slugInput.value.trim();
+      const scope = scopeSelect.value;
+      if (!name || !appSlug) return;
+
+      const checkedCategories = Array.from(categoriesHolder.querySelectorAll('input:checked')).map((c) => c.value);
+      submitBtn.disabled = true;
+
+      try {
+        const created = await api.post('/api/admin/service-keys', {
+          name,
+          appSlug,
+          scope,
+          allowedCategoryIds: checkedCategories.length ? checkedCategories : ['*'],
+          forbiddenCategoryIds: [],
+        });
+        dlg.close();
+        if (onSuccess) onSuccess();
+        showCreatedTokenModal(created);
+      } catch (err) {
+        toastError(err.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    };
+
+    dlg = modal(t('adm.service_keys_modal_title'), form);
+  }
+
+  function showCreatedTokenModal(created) {
+    const tokenBox = h('input', {
+      type: 'text',
+      readonly: '',
+      class: 'input font-mono',
+      value: created.rawToken,
+      style: 'direction: ltr; text-align: left;'
+    });
+
+    let dlg;
+    const copyBtn = h('button', {
+      type: 'button',
+      class: 'btn btn-primary',
+      onclick: () => {
+        navigator.clipboard.writeText(created.rawToken).then(() => {
+          toast(t('adm.service_keys_token_copied'), 'success');
+        });
+      }
+    }, icon('copy'), ' ', t('adm.service_keys_copy_token'));
+
+    const closeBtn = h('button', {
+      type: 'button',
+      class: 'btn',
+      onclick: () => dlg.close()
+    }, t('common.close'));
+
+    const content = h('div', { class: 'form-col' },
+      h('p', { class: 'text-warning font-semibold' }, t('adm.service_keys_token_warning')),
+      h('div', { style: 'display: flex; gap: 8px;' }, tokenBox, copyBtn),
+      h('div', { class: 'modal-actions' }, closeBtn)
+    );
+
+    dlg = modal(t('adm.service_keys_created_title'), content);
+  }
+
   // ------------------------------------------------------------------ app
   function teardown() {
     state.timers.forEach(clearInterval);
@@ -1772,6 +2070,7 @@
       { id: 'analytics', labelKey: 'adm.nav_analytics', icon: 'chart-pie' },
       { id: 'builder', labelKey: 'adm.nav_builder', icon: 'laptop-code' },
       { id: 'voices', labelKey: 'adm.nav_voices', icon: 'microphone-lines' },
+      { id: 'service_keys', labelKey: 'adm.nav_service_keys', icon: 'key' },
       { id: 'supervisors', labelKey: 'adm.nav_supervisors', icon: 'users-gear' },
       { id: 'presence', labelKey: 'adm.nav_presence', icon: 'signal' },
       { id: 'categories', labelKey: 'adm.nav_categories', icon: 'tags' },
@@ -1798,6 +2097,7 @@
           if (id === 'settings' && state.settingsPanel) state.settingsPanel.reload({ silent: true });
           if (id === 'builder' && state.builderPanel) state.builderPanel.reload({ silent: true });
           if (id === 'voices' && state.voicesPanel) state.voicesPanel.reload({ silent: true });
+          if (id === 'service_keys' && state.serviceKeysPanel) state.serviceKeysPanel.reload({ silent: true });
         }
       },
     });
@@ -1815,6 +2115,7 @@
     buildCategories(S.categories);
     buildBuilder(S.builder);
     buildVoices(S.voices);
+    buildServiceKeys(S.service_keys);
 
     state.docs = window.Widgets.mountDocuments(S.documents, {
       admin: true, getCategories: () => state.categories, getSupervisors: () => state.supervisors,

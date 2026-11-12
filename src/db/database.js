@@ -540,6 +540,117 @@ CREATE INDEX IF NOT EXISTS idx_voice_library_created ON voice_library(created_at
       `);
     },
   },
+  {
+    id: 9,
+    name: 'service_api_keys',
+    up(handle) {
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS service_api_keys (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  app_slug TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  key_prefix TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('read', 'write', 'sync', 'admin')),
+  allowed_category_ids TEXT NOT NULL DEFAULT '[]',
+  forbidden_category_ids TEXT NOT NULL DEFAULT '[]',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  created_by TEXT REFERENCES users(id),
+  last_used_at TEXT,
+  revoked_at TEXT,
+  revoked_by TEXT REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_service_keys_hash ON service_api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_service_keys_app ON service_api_keys(app_slug);
+CREATE INDEX IF NOT EXISTS idx_service_keys_active ON service_api_keys(is_active);
+      `);
+    },
+  },
+  {
+    id: 10,
+    name: 'document_versions_and_provenance',
+    up(handle) {
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS document_versions (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  vault_path TEXT,
+  chunk_count INTEGER NOT NULL DEFAULT 0,
+  change_summary TEXT,
+  created_at TEXT NOT NULL,
+  created_by TEXT REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_doc_versions_doc ON document_versions(document_id, version_number);
+      `);
+
+      const chunkCols = handle.prepare('PRAGMA table_info(chunks)').all().map((c) => c.name);
+      if (!chunkCols.includes('version_number')) {
+        handle.exec('ALTER TABLE chunks ADD COLUMN version_number INTEGER DEFAULT 1');
+      }
+      if (!chunkCols.includes('verified_at')) {
+        handle.exec('ALTER TABLE chunks ADD COLUMN verified_at TEXT');
+      }
+
+      const docCols = handle.prepare('PRAGMA table_info(documents)').all().map((c) => c.name);
+      if (!docCols.includes('version_number')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN version_number INTEGER DEFAULT 1');
+      }
+      if (!docCols.includes('is_current')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN is_current INTEGER DEFAULT 1');
+      }
+
+      const catCols = handle.prepare('PRAGMA table_info(categories)').all().map((c) => c.name);
+      if (!catCols.includes('is_secret')) {
+        handle.exec('ALTER TABLE categories ADD COLUMN is_secret INTEGER DEFAULT 0');
+      }
+    },
+  },
+  {
+    id: 11,
+    name: 'webhook_events_idempotency',
+    up(handle) {
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS processed_webhook_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'stripe',
+  payload_summary TEXT,
+  processed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_processed_webhooks_type ON processed_webhook_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_processed_webhooks_provider ON processed_webhook_events(provider);
+      `);
+    },
+  },
+  {
+    id: 12,
+    name: 'error_tracking_system',
+    up(handle) {
+      handle.exec(`
+CREATE TABLE IF NOT EXISTS error_events (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  error_code TEXT,
+  message TEXT NOT NULL,
+  stack TEXT,
+  severity TEXT NOT NULL DEFAULT 'error',
+  endpoint TEXT,
+  method TEXT,
+  status_code INTEGER,
+  actor_id TEXT,
+  actor_email TEXT,
+  ip TEXT,
+  details_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_errors_timestamp ON error_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_errors_code ON error_events(error_code);
+CREATE INDEX IF NOT EXISTS idx_errors_severity ON error_events(severity);
+      `);
+    },
+  },
 ];
 
 function openDb() {

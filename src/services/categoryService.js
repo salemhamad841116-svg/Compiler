@@ -5,14 +5,20 @@ const { AppError } = require('../utils/errors');
 const audit = require('./auditService');
 
 const SEED_CATEGORIES = [
-  ['Arabic Language', 'cat.arabic_language', 'Arabic linguistics, rhetoric, and morphology'],
-  ['Religion', 'cat.religion', 'Islamic and theological studies'],
-  ['Hadith', 'cat.hadith', 'Prophetic traditions and narrations'],
-  ['Quran Interpretation', 'cat.quran_interpretation', 'Tafsir and Quranic sciences'],
-  ['History', 'cat.history', 'Historical events, biographies, and chronicles'],
-  ['English Language', 'cat.english_language', 'English linguistics, grammar, and literature'],
-  ['Botany / Plants', 'cat.botany_plants', 'Botanical sciences, flora, and plant studies'],
-  ['Programming & Engineering', 'cat.programming_engineering', 'Software development, computer science, and engineering'],
+  ['Arabic Language', 'cat.arabic_language', 'Arabic linguistics, rhetoric, and morphology', 0],
+  ['Religion', 'cat.religion', 'Islamic and theological studies', 0],
+  ['Hadith', 'cat.hadith', 'Prophetic traditions and narrations', 0],
+  ['Quran Interpretation', 'cat.quran_interpretation', 'Tafsir and Quranic sciences', 0],
+  ['History', 'cat.history', 'Historical events, biographies, and chronicles', 0],
+  ['English Language', 'cat.english_language', 'English linguistics, grammar, and literature', 0],
+  ['Botany / Plants', 'cat.botany_plants', 'Botanical sciences, flora, and plant studies', 0],
+  ['Programming & Engineering', 'cat.programming_engineering', 'Software development, computer science, and engineering', 0],
+  ['Camel & Heritage', 'cat.camel_heritage', 'Camel breeding, heritage, races, and Bedouin traditions', 0],
+  ['Camel Breeds & Pedigrees', 'cat.camel_breeds', 'Lineages, origins, and physical characteristics of camels', 0],
+  ['Camel Races & Rounds', 'cat.camel_races', 'Rounds, tracks, tournaments, and racing events', 0],
+  ['Heritage Lexicon & Terms', 'cat.camel_terms', 'Traditional terminology, vocabulary, and cultural terms', 0],
+  ['Private Personal Vault', 'cat.private_personal', 'Strictly confidential personal vault for the master owner only', 1],
+  ['General Knowledge', 'cat.general_knowledge', 'Public knowledge, encyclopedic topics, and common references', 0],
 ];
 
 function map(r) {
@@ -21,6 +27,7 @@ function map(r) {
     name: r.name,
     nameKey: r.name_key || null,
     description: r.description,
+    isSecret: !!r.is_secret,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     documentCount: r.document_count,
@@ -29,12 +36,12 @@ function map(r) {
 
 function seedIfNeeded() {
   tx(() => {
-    for (const [name, nameKey, description] of SEED_CATEGORIES) {
+    for (const [name, nameKey, description, isSecret = 0] of SEED_CATEGORIES) {
       const existing = findByName(name);
       if (!existing) {
-        run('INSERT INTO categories (id, name, name_key, description, created_at) VALUES (?,?,?,?,?)', newId('cat'), name, nameKey, description, nowIso());
-      } else if (!existing.name_key) {
-        run('UPDATE categories SET name_key = ? WHERE id = ?', nameKey, existing.id);
+        run('INSERT INTO categories (id, name, name_key, description, is_secret, created_at) VALUES (?,?,?,?,?,?)', newId('cat'), name, nameKey, description, isSecret, nowIso());
+      } else {
+        run('UPDATE categories SET name_key = ?, is_secret = ? WHERE id = ?', nameKey, isSecret, existing.id);
       }
     }
     run("INSERT OR REPLACE INTO system_flags (key, value) VALUES ('categories_seeded', '1')");
@@ -56,10 +63,11 @@ function findByName(name) {
   return get('SELECT * FROM categories WHERE name = ?', String(name || '').trim()) || null;
 }
 
-/** Resolves a category reference (id preferred, name accepted for backward compatibility). */
+/** Resolves a category reference (id preferred, name or name_key accepted). */
 function resolveCategory(ref) {
   if (!ref) return null;
-  return getCategory(ref) || findByName(ref);
+  const str = String(ref).trim();
+  return getCategory(str) || findByName(str) || get('SELECT * FROM categories WHERE name_key = ?', str) || null;
 }
 
 function ensureUncategorized() {

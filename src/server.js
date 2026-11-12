@@ -45,6 +45,7 @@ function createApp() {
     })
   );
   app.use(requestContext);
+  app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
@@ -84,6 +85,9 @@ function createApp() {
   const voiceRoutes = require('./routes/voiceRoutes');
   app.use('/api/voices', voiceRoutes.publicRouter);
   app.use('/api/admin/voices', voiceRoutes.adminRouter);
+  app.use('/api/service/books', require('./routes/serviceBooksRoutes'));
+  app.use('/api/admin/service-keys', require('./routes/adminServiceKeyRoutes'));
+  app.use('/api/payments', require('./routes/paymentRoutes'));
   // Real-time document / settings events (Server-Sent Events). Same-origin cookie auth.
   app.get('/api/events', requireAuth(), require('./services/eventBus').sseHandler);
   app.use('/api', notFoundApi);

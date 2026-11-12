@@ -95,6 +95,12 @@ function errorHandler(err, req, res, _next) {
   const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
   const code = err.code && typeof err.code === 'string' && err.status ? err.code : status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR';
   if (status >= 500) console.error(`[${req.id}] ${req.method} ${req.originalUrl}`, err);
+
+  try {
+    const errorTracking = require('../services/errorTrackingService');
+    errorTracking.captureException(err, req, { status, code });
+  } catch (_) {}
+
   res.status(status).json({
     success: false,
     error: status >= 500 && config.isProduction ? 'Internal server error.' : err.message || 'Request failed.',

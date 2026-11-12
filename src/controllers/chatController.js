@@ -14,7 +14,7 @@ function defaultThreshold() {
  * question -> query embedding -> live chunk search (same SQLite DB the ingestion pipeline writes) -> grounded answer.
  * @returns {Promise<{answer: string, chunks: Array}>}
  */
-async function retrieveAndAnswer(question, { topK, minSimilarity, category, language } = {}) {
+async function retrieveAndAnswer(question, { topK, minSimilarity, category, language, allowedCategoryIds, forbiddenCategoryIds } = {}) {
   const limit = parseInt(topK, 10) || parseInt(process.env.TOP_K_RESULTS, 10) || 5;
   const parsedMin = parseFloat(minSimilarity);
   const threshold = Number.isFinite(parsedMin) ? parsedMin : defaultThreshold();
@@ -22,6 +22,8 @@ async function retrieveAndAnswer(question, { topK, minSimilarity, category, lang
   const filterOptions = {};
   if (category && category !== 'All') filterOptions.category = category;
   if (language && language !== 'All') filterOptions.language = language;
+  if (allowedCategoryIds) filterOptions.allowedCategoryIds = allowedCategoryIds;
+  if (forbiddenCategoryIds) filterOptions.forbiddenCategoryIds = forbiddenCategoryIds;
 
   let chunks;
   try {
@@ -58,17 +60,38 @@ async function handleUserChatQuery(req, res) {
     throw new AppError(400, 'QUESTION_REQUIRED', 'A valid "question" string is required in the request body.');
   }
 
-  const { answer, chunks } = await retrieveAndAnswer(question.trim(), { topK, minSimilarity, category, language });
+  let allowedCategoryIds = req.serviceClient?.allowedCategoryIds;
+  let forbiddenCategoryIds = req.serviceClient?.forbiddenCategoryIds;
+
+  // Privacy isolation wall for public / unauthenticated chat:
+  // Strictly forbid any secret or private personal categories!
+  if (!req.serviceClient && (!req.user || req.user.role !== 'admin')) {
+    forbiddenCategoryIds = Array.from(new Set([...(forbiddenCategoryIds || []), 'cat.private_personal', 'Private Personal Vault']));
+  }
+
+  const { answer, chunks } = await retrieveAndAnswer(question.trim(), {
+    topK,
+    minSimilarity,
+    category,
+    language,
+    allowedCategoryIds,
+    forbiddenCategoryIds,
+  });
 
   return res.status(200).json({
     success: true,
     answer,
     sources: chunks.map((c) => ({
       documentId: c.documentId,
+      sourceId: c.sourceId || c.documentId,
       bookTitle: c.bookTitle,
       category: c.category || 'General',
+      categoryId: c.categoryId || null,
       language: c.language || 'Arabic',
       page: c.page || null,
+      pageNumber: c.pageNumber || c.page || null,
+      versionNumber: c.versionNumber || 1,
+      verifiedAt: c.verifiedAt || null,
       similarity: parseFloat(c.similarity.toFixed(4)),
       excerpt: c.chunk.length > 200 ? `${c.chunk.slice(0, 200)}...` : c.chunk,
     })),

@@ -41,5 +41,6 @@ flutter_client/.pub/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/*.sqlite*
 data/.settings.key
 data/tmp_uploads/

@@ -365,4 +365,40 @@ router.post(
   })
 );
 
+// ----------------------------------------------------------- error tracking & diagnostics
+router.get(
+  '/system/errors',
+  asyncHandler(async (req, res) => {
+    const errorTracking = require('../services/errorTrackingService');
+    const { limit = 50, offset = 0, severity = null } = req.query;
+    const errors = errorTracking.getRecentErrors({ limit, offset, severity });
+    const stats = errorTracking.getErrorStats();
+    res.json({ success: true, data: errors, stats });
+  })
+);
+
+router.post(
+  '/system/errors/clear',
+  asyncHandler(async (req, res) => {
+    const errorTracking = require('../services/errorTrackingService');
+    const result = errorTracking.clearErrors();
+    audit.record({
+      action: 'system.errors_cleared',
+      actor: req.user,
+      ip: clientIp(req),
+      detail: result,
+    });
+    res.json({ success: true, data: result });
+  })
+);
+
+router.delete(
+  '/system/errors/:id',
+  asyncHandler(async (req, res) => {
+    const errorTracking = require('../services/errorTrackingService');
+    const result = errorTracking.deleteError(req.params.id);
+    res.json({ success: true, data: result });
+  })
+);
+
 module.exports = router;
