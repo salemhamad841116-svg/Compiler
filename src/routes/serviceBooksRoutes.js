@@ -16,6 +16,17 @@ const vectorDbModel = require('../models/vectorDbModel');
 const { retrieveAndAnswer } = require('../controllers/chatController');
 const audit = require('../services/auditService');
 const serviceKeyService = require('../services/serviceKeyService');
+const storageService = require('../services/storageService');
+
+const AUDIO_EXTS = ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm'];
+const AUDIO_MIMES = {
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.webm': 'audio/webm',
+};
 
 const upload = multer({
   dest: config.tempUploadDir,
@@ -81,33 +92,112 @@ router.post(
 
     let docTitle = String(body.title || '').trim();
     let textContent = '';
+    let kind = 'document';
+    let fileType = 'txt';
+    let mimeType = 'text/plain';
+    let vaultPath = null;
+    let storageReference = null;
+    let sizeBytes = 0;
+    let sha256 = null;
+
+    const docId = newId('doc');
+    const now = nowIso();
 
     if (req.file) {
-      docTitle = docTitle || path.basename(req.file.originalname, path.extname(req.file.originalname));
-      // Read file content
-      if (req.file.mimetype.includes('text') || req.file.originalname.endsWith('.txt') || req.file.originalname.endsWith('.md')) {
-        textContent = fs.readFileSync(req.file.path, 'utf8');
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      docTitle = docTitle || path.basename(req.file.originalname, ext);
+      const isAudio = AUDIO_EXTS.includes(ext) || (req.file.mimetype && req.file.mimetype.startsWith('audio/'));
+
+      if (isAudio) {
+        kind = 'media';
+        fileType = ext ? ext.slice(1) : 'wav';
+        mimeType = req.file.mimetype || AUDIO_MIMES[ext] || 'audio/wav';
+
+        // Save raw audio permanently to Data Vault
+        const saved = await storageService.saveFile(req.file.path, docId, req.file.originalname);
+        vaultPath = saved.relPath;
+        storageReference = saved.storageReference;
+        sizeBytes = saved.size;
+        sha256 = saved.sha256;
+
+        // Transcription via Whisper / provider
+        if (body.transcriptText || body.transcript_text || body.rawText) {
+          textContent = String(body.transcriptText || body.transcript_text || body.rawText).trim();
+        } else {
+          try {
+            textContent = await provider().transcribe(saved.absPath, req.file.originalname);
+          } catch (e) {
+            console.warn(`[ServiceBooks] Whisper transcription failed: ${e.message}`);
+          }
+        }
+        if (!textContent || !textContent.trim()) {
+          textContent = `${docTitle} (Audio recording in ${targetCategory.name})`;
+        }
+      } else if (req.file.mimetype.includes('text') || ext === '.txt' || ext === '.md') {
+        const saved = await storageService.saveFile(req.file.path, docId, req.file.originalname);
+        vaultPath = saved.relPath;
+        storageReference = saved.storageReference;
+        sizeBytes = saved.size;
+        sha256 = saved.sha256;
+        kind = 'document';
+        fileType = ext ? ext.slice(1) : 'txt';
+        mimeType = req.file.mimetype || 'text/plain';
+        textContent = fs.readFileSync(saved.absPath, 'utf8');
       } else {
-        // For PDF or binary docs, fallback to text representation or use existing pipeline parser
+        const saved = await storageService.saveFile(req.file.path, docId, req.file.originalname);
+        vaultPath = saved.relPath;
+        storageReference = saved.storageReference;
+        sizeBytes = saved.size;
+        sha256 = saved.sha256;
+        kind = 'document';
+        fileType = ext ? ext.slice(1) : 'bin';
+        mimeType = req.file.mimetype || 'application/octet-stream';
         textContent = `Content for book: ${docTitle}. Document ingested via Service API. Category: ${targetCategory.name}.`;
       }
-    } else if (body.rawText || body.text || body.content) {
-      textContent = String(body.rawText || body.text || body.content).trim();
+    } else if (body.rawText || body.text || body.content || body.transcriptText || body.transcript_text) {
+      textContent = String(body.transcriptText || body.transcript_text || body.rawText || body.text || body.content).trim();
       docTitle = docTitle || `Document_${Date.now()}`;
+      kind = 'raw_text';
+      fileType = 'txt';
+      mimeType = 'text/plain';
+      const saved = await storageService.saveText(textContent, docId, docTitle);
+      vaultPath = saved.relPath;
+      storageReference = saved.storageReference;
+      sizeBytes = saved.size;
+      sha256 = saved.sha256;
     } else {
       throw new AppError(400, 'PAYLOAD_REQUIRED', 'Either an uploaded file or "rawText" field is required.');
     }
 
     scanForPromptInjection(textContent);
 
-    const docId = newId('doc');
-    const now = nowIso();
-    const docSize = textContent.length;
-
     let ownerId = client.createdBy;
     if (!ownerId) {
       const u = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get();
       ownerId = u ? u.id : null;
+    }
+
+    // Acoustic / dialect training metadata
+    const dialectCode = body.dialectCode || body.dialect_code || (
+      targetCategory.name_key === 'cat.dialect_emirati' ? 'ar-AE' :
+      targetCategory.name_key === 'cat.dialect_omani' ? 'ar-OM' : null
+    );
+    const pronunciationNotes = body.pronunciationNotes || body.pronunciation_notes || null;
+    const speakerTone = body.speakerTone || body.speaker_tone || null;
+    let trainingMetadata = null;
+    if (body.trainingMetadata || body.training_metadata) {
+      const tm = body.trainingMetadata || body.training_metadata;
+      trainingMetadata = typeof tm === 'object' ? JSON.stringify(tm) : String(tm);
+    } else if (dialectCode || speakerTone || pronunciationNotes || kind === 'media') {
+      trainingMetadata = JSON.stringify({
+        dialectCode,
+        speakerTone,
+        pronunciationNotes,
+        kind,
+        fileType,
+        originalFilename: req.file ? req.file.originalname : `${docTitle}.txt`,
+        recordedAt: now,
+      });
     }
 
     // Split text into chunks
@@ -119,23 +209,37 @@ router.post(
     const embedTag = provider().embedTag();
 
     tx(() => {
-      // 1. Insert document record with version_number = 1
+      // 1. Insert document record with version_number = 1, is_current = 1
       db.prepare(`
         INSERT INTO documents (
           id, owner_id, title, original_filename, kind, file_type,
-          mime_type, size_bytes, category_id, language, upload_status,
-          ocr_status, index_status, chunk_count, page_count,
+          mime_type, size_bytes, sha256, category_id, language, vault_path,
+          storage_reference, upload_status, ocr_status, index_status,
+          chunk_count, page_count, raw_text, dialect_code, transcript_text,
+          pronunciation_notes, speaker_tone, training_metadata,
           source, attribution, uploaded_at, version_number, is_current
-        ) VALUES (?, ?, ?, ?, 'document', 'txt', 'text/plain', ?, ?, ?, 'stored', 'not_applicable', 'completed', ?, 1, 'service_api', 'verified', ?, 1, 1)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stored', 'completed', 'completed', ?, 1, ?, ?, ?, ?, ?, ?, 'service_api', 'verified', ?, 1, 1)
       `).run(
         docId,
         ownerId,
         docTitle,
         req.file ? req.file.originalname : `${docTitle}.txt`,
-        docSize,
+        kind,
+        fileType,
+        mimeType,
+        sizeBytes || textContent.length,
+        sha256 || null,
         targetCategory.id,
         body.language || 'Arabic',
+        vaultPath || null,
+        storageReference || null,
         chunkTexts.length,
+        textContent,
+        dialectCode,
+        textContent,
+        pronunciationNotes,
+        speakerTone,
+        trainingMetadata,
         now
       );
 
@@ -166,12 +270,6 @@ router.post(
 
     vectorDbModel.invalidateCache();
 
-    if (req.file) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
-    }
-
-    vectorDbModel.invalidateCache();
-
     audit.record({
       action: 'service_book.ingested',
       actor: req.actor,
@@ -180,7 +278,11 @@ router.post(
         title: docTitle,
         category: targetCategory.name,
         categoryId: targetCategory.id,
+        categoryKey: targetCategory.name_key,
         chunkCount: chunkTexts.length,
+        kind,
+        dialectCode,
+        speakerTone,
         appSlug: client.appSlug,
       },
     });
@@ -193,13 +295,21 @@ router.post(
       document: {
         id: docId,
         title: docTitle,
+        kind,
+        fileType,
         category: targetCategory.name,
         categoryId: targetCategory.id,
+        categoryKey: targetCategory.name_key,
         chunkCount: chunkTexts.length,
         version: 1,
         versionNumber: 1,
         status: 'completed',
         ingestedAt: now,
+        dialectCode,
+        speakerTone,
+        pronunciationNotes,
+        transcriptText: textContent,
+        vaultPath,
       },
     });
   })
@@ -383,11 +493,12 @@ router.get(
     const db = getDb();
 
     let query = `
-      SELECT d.id, d.title, d.category_id, cat.name as category_name, d.version_number,
-             d.chunk_count, d.size_bytes, d.uploaded_at
+      SELECT d.id, d.title, d.kind, d.file_type, d.category_id, cat.name as category_name, cat.name_key as category_key,
+             d.version_number, d.chunk_count, d.size_bytes, d.uploaded_at,
+             d.dialect_code, d.speaker_tone, d.pronunciation_notes, d.transcript_text, d.vault_path
       FROM documents d
       LEFT JOIN categories cat ON cat.id = d.category_id
-      WHERE d.index_status = 'completed'
+      WHERE d.index_status = 'completed' AND COALESCE(d.is_current, 1) = 1
     `;
     const rows = db.prepare(query).all();
 
@@ -397,11 +508,18 @@ router.get(
     const list = filtered.map((r) => ({
       id: r.id,
       title: r.title,
+      kind: r.kind,
+      fileType: r.file_type,
       categoryId: r.category_id,
       category: r.category_name,
+      categoryKey: r.category_key,
       version: r.version_number || 1,
       chunkCount: r.chunk_count,
       uploadedAt: r.uploaded_at,
+      dialectCode: r.dialect_code || null,
+      speakerTone: r.speaker_tone || null,
+      pronunciationNotes: r.pronunciation_notes || null,
+      vaultPath: r.vault_path || null,
     }));
 
     res.json({
@@ -468,6 +586,9 @@ router.post(
         category: c.category,
         categoryId: c.categoryId,
         categoryKey: c.categoryKey,
+        dialectCode: c.dialectCode || null,
+        speakerTone: c.speakerTone || null,
+        pronunciationNotes: c.pronunciationNotes || null,
         pageNumber: c.pageNumber || c.page,
         versionNumber: c.versionNumber || 1,
         verifiedAt: c.verifiedAt || null,

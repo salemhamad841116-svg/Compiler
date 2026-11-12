@@ -185,6 +185,14 @@ class ServiceKeyService {
         if (resolved.id) idsToCheck.push(resolved.id);
         if (resolved.name_key) idsToCheck.push(resolved.name_key);
         if (resolved.name) idsToCheck.push(resolved.name);
+        if (resolved.parent_id) {
+          idsToCheck.push(resolved.parent_id);
+          const parent = categoryService.getCategory(resolved.parent_id);
+          if (parent) {
+            if (parent.name_key) idsToCheck.push(parent.name_key);
+            if (parent.name) idsToCheck.push(parent.name);
+          }
+        }
       }
     } catch (_) {}
 

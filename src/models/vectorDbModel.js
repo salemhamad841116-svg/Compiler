@@ -34,7 +34,9 @@ function loadCache() {
     `SELECT c.id, c.document_id, c.idx, c.page, c.text, c.embedding, c.version_number, c.verified_at,
             d.title, d.language, d.kind, d.owner_id, d.category_id, d.file_type, d.size_bytes, d.uploaded_at,
             d.is_current, d.version_number AS doc_version_number,
-            cat.name AS category_name, cat.name_key AS category_name_key, u.email AS owner_email
+            d.dialect_code, d.speaker_tone, d.pronunciation_notes,
+            cat.name AS category_name, cat.name_key AS category_name_key, cat.parent_id AS category_parent_id,
+            u.email AS owner_email
      FROM chunks c
      JOIN documents d ON d.id = c.document_id
      LEFT JOIN categories cat ON cat.id = d.category_id
@@ -62,7 +64,11 @@ function loadCache() {
     ownerEmail: r.owner_email,
     categoryId: r.category_id,
     categoryNameKey: r.category_name_key,
+    categoryParentId: r.category_parent_id,
     category: r.category_name || 'Uncategorized',
+    dialectCode: r.dialect_code || null,
+    speakerTone: r.speaker_tone || null,
+    pronunciationNotes: r.pronunciation_notes || null,
     fileType: r.file_type,
     uploadedAt: r.uploaded_at,
   }));
@@ -115,6 +121,7 @@ async function searchVectorDatabase(queryEmbedding, topK = 5, minSimilarity = 0.
       (r) =>
         allowed.has(String(r.categoryId).toLowerCase()) ||
         (r.categoryNameKey && allowed.has(String(r.categoryNameKey).toLowerCase())) ||
+        (r.categoryParentId && allowed.has(String(r.categoryParentId).toLowerCase())) ||
         allowed.has(String(r.category).toLowerCase())
     );
   }
@@ -126,6 +133,7 @@ async function searchVectorDatabase(queryEmbedding, topK = 5, minSimilarity = 0.
       (r) =>
         !forbidden.has(String(r.categoryId).toLowerCase()) &&
         (!r.categoryNameKey || !forbidden.has(String(r.categoryNameKey).toLowerCase())) &&
+        (!r.categoryParentId || !forbidden.has(String(r.categoryParentId).toLowerCase())) &&
         !forbidden.has(String(r.category).toLowerCase())
     );
   }
@@ -147,6 +155,10 @@ async function searchVectorDatabase(queryEmbedding, topK = 5, minSimilarity = 0.
       bookTitle: r.bookTitle,
       category: r.category,
       categoryId: r.categoryId,
+      categoryKey: r.categoryNameKey,
+      dialectCode: r.dialectCode,
+      speakerTone: r.speakerTone,
+      pronunciationNotes: r.pronunciationNotes,
       language: r.language,
       chunk: r.chunk,
       page: r.page,

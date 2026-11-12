@@ -651,6 +651,35 @@ CREATE INDEX IF NOT EXISTS idx_errors_severity ON error_events(severity);
       `);
     },
   },
+  {
+    id: 13,
+    name: 'voice_dialects_and_training_metadata',
+    up(handle) {
+      const catCols = handle.prepare("PRAGMA table_info('categories')").all().map((c) => c.name);
+      if (!catCols.includes('parent_id')) {
+        handle.exec('ALTER TABLE categories ADD COLUMN parent_id TEXT REFERENCES categories(id)');
+      }
+      handle.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)');
+
+      const docCols = handle.prepare("PRAGMA table_info('documents')").all().map((c) => c.name);
+      if (!docCols.includes('dialect_code')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN dialect_code TEXT');
+      }
+      if (!docCols.includes('transcript_text')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN transcript_text TEXT');
+      }
+      if (!docCols.includes('pronunciation_notes')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN pronunciation_notes TEXT');
+      }
+      if (!docCols.includes('speaker_tone')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN speaker_tone TEXT');
+      }
+      if (!docCols.includes('training_metadata')) {
+        handle.exec('ALTER TABLE documents ADD COLUMN training_metadata TEXT');
+      }
+      handle.exec('CREATE INDEX IF NOT EXISTS idx_documents_dialect ON documents(dialect_code)');
+    },
+  },
 ];
 
 function openDb() {

@@ -276,6 +276,158 @@ test('Quality Gate 1: Isolation and Space Permissions (0% Data Leakage)', async 
     assert.equal(deleteRes.json.code, 'INSUFFICIENT_SCOPE');
   });
 
+  await t.test('6. Category seeds expansion: public audience, translation glossary, and voice dialects with parent-child linkage', async () => {
+    categoryService.seedIfNeeded();
+    const publicAudience = categoryService.resolveCategory('cat.public_audience');
+    const translationGlossary = categoryService.resolveCategory('cat.translation_glossary');
+    const voiceDialects = categoryService.resolveCategory('cat.voice_dialects');
+    const dialectEmirati = categoryService.resolveCategory('cat.dialect_emirati');
+    const dialectOmani = categoryService.resolveCategory('cat.dialect_omani');
+    const dialectCamelCommentary = categoryService.resolveCategory('cat.dialect_camel_commentary');
+    const dialectAuctioneer = categoryService.resolveCategory('cat.dialect_auctioneer');
+
+    assert.ok(publicAudience, 'Public Audience category should exist');
+    assert.ok(translationGlossary, 'Translation Glossary category should exist');
+    assert.ok(voiceDialects, 'Voice & Dialects Data main category should exist');
+    assert.ok(dialectEmirati, 'Emirati Dialect category should exist');
+    assert.ok(dialectOmani, 'Omani Dialect category should exist');
+    assert.ok(dialectCamelCommentary, 'Camel Commentary category should exist');
+    assert.ok(dialectAuctioneer, 'Auctioneer Dialect category should exist');
+
+    assert.equal(dialectEmirati.parent_id, voiceDialects.id, 'Emirati dialect parent must be voice_dialects');
+    assert.equal(dialectOmani.parent_id, voiceDialects.id, 'Omani dialect parent must be voice_dialects');
+    assert.equal(dialectCamelCommentary.parent_id, voiceDialects.id, 'Camel commentary parent must be voice_dialects');
+    assert.equal(dialectAuctioneer.parent_id, voiceDialects.id, 'Auctioneer parent must be voice_dialects');
+  });
+
+  await t.test('7. Audio Ingestion & Whisper Transcription Pipeline with acoustic training metadata', async () => {
+    const emiratiKey = serviceKeyService.createServiceKey({
+      name: 'Emirati Dialect Ingestion Key',
+      appSlug: 'emirati-dialect-service',
+      scope: 'write',
+      allowedCategoryIds: ['cat.dialect_emirati'],
+      createdBy: adminId,
+    });
+
+    // Create a 1-second silent WAV buffer
+    const samples = 16000;
+    const wavBuffer = Buffer.alloc(44 + samples * 2);
+    wavBuffer.write('RIFF', 0);
+    wavBuffer.writeUInt32LE(36 + samples * 2, 4);
+    wavBuffer.write('WAVE', 8);
+    wavBuffer.write('fmt ', 12);
+    wavBuffer.writeUInt32LE(16, 16);
+    wavBuffer.writeUInt16LE(1, 20);
+    wavBuffer.writeUInt16LE(1, 22);
+    wavBuffer.writeUInt32LE(16000, 24);
+    wavBuffer.writeUInt32LE(32000, 28);
+    wavBuffer.writeUInt16LE(2, 32);
+    wavBuffer.writeUInt16LE(16, 34);
+    wavBuffer.write('data', 36);
+    wavBuffer.writeUInt32LE(samples * 2, 40);
+
+    const formData = new FormData();
+    const fileBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+    formData.append('file', fileBlob, 'al_dhafra_race_chant.wav');
+    formData.append('category', 'cat.dialect_emirati');
+    formData.append('title', 'Al Dhafra Race Heritage Chant');
+    formData.append('transcriptText', 'Al Dhafra Camel Festival and heritage race chant in the local Emirati dialect');
+    formData.append('dialectCode', 'ar-AE');
+    formData.append('speakerTone', 'energetic_heritage');
+    formData.append('pronunciationNotes', 'Northern emirates intonation and camel racing terms');
+
+    const ingestRes = await fetch(`${baseUrl}/api/service/books/ingest`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${emiratiKey.rawToken}`,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: formData,
+    });
+    const ingestJson = await ingestRes.json();
+    assert.equal(ingestRes.status, 201);
+    assert.equal(ingestJson.success, true);
+    assert.equal(ingestJson.document.kind, 'media');
+    assert.equal(ingestJson.document.fileType, 'wav');
+    assert.equal(ingestJson.document.dialectCode, 'ar-AE');
+    assert.equal(ingestJson.document.speakerTone, 'energetic_heritage');
+    assert.equal(ingestJson.document.pronunciationNotes, 'Northern emirates intonation and camel racing terms');
+    assert.ok(ingestJson.document.vaultPath, 'Vault path must be recorded');
+    assert.ok(ingestJson.document.transcriptText, 'Transcription text must be populated');
+
+    // Verify row in database
+    const dbDoc = db.prepare('SELECT * FROM documents WHERE id = ?').get(ingestJson.documentId);
+    assert.ok(dbDoc);
+    assert.equal(dbDoc.dialect_code, 'ar-AE');
+    assert.equal(dbDoc.speaker_tone, 'energetic_heritage');
+    assert.equal(dbDoc.kind, 'media');
+    assert.equal(dbDoc.version_number, 1);
+    assert.equal(dbDoc.is_current, 1);
+  });
+
+  await t.test('8. Strict isolation across dialect sub-branches using independent Service API keys', async () => {
+    const emiratiKey = serviceKeyService.createServiceKey({
+      name: 'Emirati Agent Key',
+      appSlug: 'emirati-agent',
+      scope: 'read',
+      allowedCategoryIds: ['cat.dialect_emirati'],
+      createdBy: adminId,
+    });
+
+    const omaniKey = serviceKeyService.createServiceKey({
+      name: 'Omani Agent Key',
+      appSlug: 'omani-agent',
+      scope: 'write',
+      allowedCategoryIds: ['cat.dialect_omani'],
+      createdBy: adminId,
+    });
+
+    const emiratiClient = makeServiceClient(emiratiKey.rawToken);
+    const omaniClient = makeServiceClient(omaniKey.rawToken);
+
+    // Emirati key queries emirati dialect -> 200 OK with dialectCode returned in sources
+    const resEmiratiQuery = await emiratiClient.post('/api/service/books/query', {
+      query: 'Al Dhafra Camel Festival',
+      categoryId: 'cat.dialect_emirati',
+      minSimilarity: 0.1,
+    });
+    assert.equal(resEmiratiQuery.status, 200);
+    assert.ok(resEmiratiQuery.json.sources.length > 0);
+    assert.equal(resEmiratiQuery.json.sources[0].dialectCode, 'ar-AE');
+    assert.equal(resEmiratiQuery.json.sources[0].speakerTone, 'energetic_heritage');
+
+    // Emirati key tries to query omani dialect -> 403 Forbidden
+    const resForbiddenOmani = await emiratiClient.post('/api/service/books/query', {
+      query: 'Omani speech',
+      categoryId: 'cat.dialect_omani',
+    });
+    assert.equal(resForbiddenOmani.status, 403);
+    assert.equal(resForbiddenOmani.json.code, 'CATEGORY_ACCESS_FORBIDDEN');
+
+    // Emirati key tries to query programming -> 403 Forbidden
+    const resForbiddenProg = await emiratiClient.post('/api/service/books/query', {
+      query: 'Software architecture',
+      categoryId: 'cat.programming_engineering',
+    });
+    assert.equal(resForbiddenProg.status, 403);
+
+    // Emirati key tries to query private vault -> 403 Forbidden
+    const resForbiddenVault = await emiratiClient.post('/api/service/books/query', {
+      query: 'Private credentials',
+      categoryId: 'cat.private_personal',
+    });
+    assert.equal(resForbiddenVault.status, 403);
+
+    // Omani key tries to write into emirati dialect -> 403 Forbidden
+    const resForbiddenCrossWrite = await omaniClient.post('/api/service/books/ingest', {
+      title: 'Attempted Cross Dialect Ingest',
+      rawText: 'Text intended for wrong dialect',
+      category: 'cat.dialect_emirati',
+    });
+    assert.equal(resForbiddenCrossWrite.status, 403);
+    assert.equal(resForbiddenCrossWrite.json.code, 'CATEGORY_ACCESS_FORBIDDEN');
+  });
+
   t.after(async () => {
     if (httpServer) {
       if (typeof httpServer.closeAllConnections === 'function') {
